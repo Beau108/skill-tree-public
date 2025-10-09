@@ -1,2 +1,24 @@
-# skill-tree-public
-Full-stack Spring Boot + React platform that gamifies personal skill tracking and growth.
+# 🌳 Skill Tree
+
+A full-stack **Spring Boot + React** application that gamifies skill development through visual, shareable progress trees.
+
+**Skill Tree** is a full-stack web application that helps users **track, visualize, and share their personal skill development**. It organizes abilities into hierarchical “trees” with measurable progress, achievements, and time spent — creating a gamified approach to learning and growth.
+
+---
+
+## 📆 Project Status: “Final Backend Prototype”
+*Updated: 10/9/25*
+
+This repository represents the **final iteration of the Skill Tree backend**, capturing the complete architecture, endpoints, and data models that power the platform.  
+It is **feature-complete** but **not yet fully tested or production-deployed**. The project serves as a strong foundation for user management, skill tracking, achievements, and activity logging through a RESTful **Spring Boot API** integrated with **MongoDB** and **Firebase Authentication**.
+
+---
+
+## 🧭 Next Steps
+- 🧪 **Integration & Unit Testing** — expand test coverage for all controllers and services  
+- 🧩 **Frontend Integration** — refine the React client for smoother user experience and API consumption  
+- ✅ **E2E Testing** — implement end-to-end scripts to validate full-stack functionality  
+- 🌐 **Cloud Deployment** — deploy API and image storage on **AWS**, with authentication and hosting managed via **Firebase**  
+- 🔁 **Iteration & Feedback** — gather user input and explore new features to enhance usability and engagement  
+---
+
