@@ -22,3 +22,6 @@ It is **feature-complete** but **not yet fully tested or production-deployed**. 
 - 🔁 **Iteration & Feedback** — gather user input and explore new features to enhance usability and engagement  
 ---
 
+### License
+This project is license under a **Personal Project License (All Rights Reserved)**.
+Please contact me for permission before reusing or redistributing any code or assets.
