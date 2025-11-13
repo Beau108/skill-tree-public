@@ -1,0 +1,1601 @@
+openapi: 3.0.3
+info:
+  title: Skill Tree API
+  version: 1.0.0
+  description: >
+    API for managing users, skills, achievements, activities, orientations, and friendships.
+    Includes "me", "friends", and "public" endpoints for access management.
+
+servers:
+  - url: https://api.skilltree.com
+
+paths:
+  # Me User Endpoints
+  /api/users/me:
+    post:
+      summary: Create a new user
+      tags: [Me - Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '201':
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    get:
+      summary: Get authenticated user
+      tags: [Me - Users]
+      responses:
+        '200':
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    put:
+      summary: Update authenticated user
+      tags: [Me - Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    patch:
+      summary: Partially update authenticated user
+      tags: [Me - Users]
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    delete:
+      summary: Delete authenticated user
+      tags: [Me - Users]
+      responses:
+        '204':
+          description: User deleted
+
+  /api/users/me/feed:
+    get:
+      summary: Get authenticated user's activity feed
+      tags: [Me - Users]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedItem'
+
+  # Me Tree Endpoints
+  /api/trees/me:
+    post:
+      summary: Create a new tree
+      tags: [Me - Trees]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreeRequest'
+      responses:
+        '201':
+          description: Created tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeResponse'
+    get:
+      summary: Get all trees for authenticated user
+      tags: [Me - Trees]
+      responses:
+        '200':
+          description: List of trees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TreeResponse'
+    delete:
+      summary: Delete all trees for authenticated user
+      tags: [Me - Trees]
+      responses:
+        '204':
+          description: All trees deleted
+
+  /api/trees/me/{treeId}:
+    get:
+      summary: Get a specific tree
+      tags: [Me - Trees]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tree details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeResponse'
+    put:
+      summary: Update a tree
+      tags: [Me - Trees]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreeRequest'
+      responses:
+        '200':
+          description: Updated tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeResponse'
+    patch:
+      summary: Partially update a tree
+      tags: [Me - Trees]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeResponse'
+    delete:
+      summary: Delete a tree
+      tags: [Me - Trees]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Tree deleted
+
+  /api/trees/me/layout/{treeId}:
+    get:
+      summary: Get tree layout for rendering
+      tags: [Me - Trees]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tree layout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeTreeLayout'
+
+  /api/trees/me/stats:
+    get:
+      summary: Get aggregate statistics across all trees
+      tags: [Me - Trees]
+      responses:
+        '200':
+          description: Aggregate tree statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeStats'
+
+  /api/trees/me/stats/{treeId}:
+    get:
+      summary: Get statistics for a single tree
+      tags: [Me - Trees]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tree statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeStats'
+
+  /api/trees/me/favorite:
+    get:
+      summary: Get user's favorite tree
+      tags: [Me - Trees]
+      responses:
+        '200':
+          description: Favorite tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteTree'
+
+  # Me Skill Endpoints
+  /api/skills/me:
+    post:
+      summary: Create a new skill
+      tags: [Me - Skills]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillRequest'
+      responses:
+        '201':
+          description: Created skill
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+    get:
+      summary: Get all skills for authenticated user
+      tags: [Me - Skills]
+      parameters:
+        - name: root
+          in: query
+          schema:
+            type: boolean
+        - name: parentSkillId
+          in: query
+          schema:
+            type: string
+        - name: sortMode
+          in: query
+          schema:
+            type: string
+            enum: [NAME, TIME_SPENT, CREATED_AT]
+      responses:
+        '200':
+          description: List of skills
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SkillResponse'
+    delete:
+      summary: Delete all skills for authenticated user
+      tags: [Me - Skills]
+      responses:
+        '204':
+          description: All skills deleted
+
+  /api/skills/me/{skillId}:
+    get:
+      summary: Get a specific skill
+      tags: [Me - Skills]
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+    put:
+      summary: Update a skill
+      tags: [Me - Skills]
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillRequest'
+      responses:
+        '200':
+          description: Updated skill
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+    patch:
+      summary: Partially update a skill
+      tags: [Me - Skills]
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated skill
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+    delete:
+      summary: Delete a skill
+      tags: [Me - Skills]
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Skill deleted
+
+  # Me Achievement Endpoints
+  /api/achievements/me:
+    post:
+      summary: Create a new achievement
+      tags: [Me - Achievements]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AchievementRequest'
+      responses:
+        '201':
+          description: Created achievement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementResponse'
+    get:
+      summary: Get all achievements for authenticated user
+      tags: [Me - Achievements]
+      parameters:
+        - name: treeId
+          in: query
+          schema:
+            type: string
+        - name: next
+          in: query
+          schema:
+            type: boolean
+        - name: sortMode
+          in: query
+          schema:
+            type: string
+            enum: [TITLE, CREATED_AT, COMPLETED_AT]
+      responses:
+        '200':
+          description: List of achievements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AchievementResponse'
+    delete:
+      summary: Delete all achievements for authenticated user
+      tags: [Me - Achievements]
+      responses:
+        '204':
+          description: All achievements deleted
+
+  /api/achievements/me/{achievementId}:
+    get:
+      summary: Get a specific achievement
+      tags: [Me - Achievements]
+      parameters:
+        - name: achievementId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Achievement details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementResponse'
+    put:
+      summary: Update an achievement
+      tags: [Me - Achievements]
+      parameters:
+        - name: achievementId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AchievementRequest'
+      responses:
+        '200':
+          description: Updated achievement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementResponse'
+    patch:
+      summary: Partially update an achievement
+      tags: [Me - Achievements]
+      parameters:
+        - name: achievementId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated achievement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementResponse'
+    delete:
+      summary: Delete an achievement
+      tags: [Me - Achievements]
+      parameters:
+        - name: achievementId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Achievement deleted
+
+  /api/achievements/me/{achievementId}/children:
+    get:
+      summary: Get achievements that have this achievement as a prerequisite
+      tags: [Me - Achievements]
+      parameters:
+        - name: achievementId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of child achievements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Achievement'
+
+  # Me Activity Endpoints
+  /api/activities/me:
+    post:
+      summary: Create a new activity
+      tags: [Me - Activities]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityRequest'
+      responses:
+        '201':
+          description: Created activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResponse'
+    get:
+      summary: Get all activities for authenticated user
+      tags: [Me - Activities]
+      parameters:
+        - name: skillId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of activities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityResponse'
+    delete:
+      summary: Delete all activities for authenticated user
+      tags: [Me - Activities]
+      responses:
+        '204':
+          description: All activities deleted
+
+  /api/activities/me/{activityId}:
+    get:
+      summary: Get a specific activity
+      tags: [Me - Activities]
+      parameters:
+        - name: activityId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Activity details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResponse'
+    put:
+      summary: Update an activity
+      tags: [Me - Activities]
+      parameters:
+        - name: activityId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityRequest'
+      responses:
+        '200':
+          description: Updated activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResponse'
+    patch:
+      summary: Partially update an activity
+      tags: [Me - Activities]
+      parameters:
+        - name: activityId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResponse'
+    delete:
+      summary: Delete an activity
+      tags: [Me - Activities]
+      parameters:
+        - name: activityId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Activity deleted
+
+  /api/activities/me/streak:
+    get:
+      summary: Get user's activity streak and recent activity
+      tags: [Me - Activities]
+      responses:
+        '200':
+          description: Recent activity data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecentActivity'
+
+  # Me Orientation Endpoints
+  /api/orientations/me/{treeId}:
+    put:
+      summary: Update orientation for a tree
+      tags: [Me - Orientations]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrientationRequest'
+      responses:
+        '204':
+          description: Orientation updated
+    patch:
+      summary: Partially update orientation for a tree
+      tags: [Me - Orientations]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+      responses:
+        '204':
+          description: Orientation updated
+
+  # Me Friendship Endpoints
+  /api/friendships/me:
+    get:
+      summary: Get all friendships for authenticated user
+      tags: [Me - Friendships]
+      responses:
+        '200':
+          description: Friend list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FriendList'
+
+  /api/friendships/me/{displayName}:
+    post:
+      summary: Send friend request by display name
+      tags: [Me - Friendships]
+      parameters:
+        - name: displayName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Friend request sent
+
+  /api/friendships/me/{friendshipId}:
+    patch:
+      summary: Update friendship status
+      tags: [Me - Friendships]
+      parameters:
+        - name: friendshipId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [PENDING, ACCEPTED, BLOCKED]
+      responses:
+        '200':
+          description: Updated friendship status
+          content:
+            application/json:
+              schema:
+                type: string
+                enum: [PENDING, ACCEPTED, BLOCKED]
+    delete:
+      summary: Delete friendship
+      tags: [Me - Friendships]
+      parameters:
+        - name: friendshipId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Friendship deleted
+
+  # Public Tree Endpoints
+  /api/trees/public:
+    get:
+      summary: Get all public trees
+      tags: [Public - Trees]
+      responses:
+        '200':
+          description: List of public trees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tree'
+
+  /api/trees/public/{treeId}:
+    get:
+      summary: Get a specific public tree
+      tags: [Public - Trees]
+      parameters:
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public tree details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tree'
+
+  # Friend User Endpoints
+  /api/users/friends:
+    get:
+      summary: Get all friends
+      tags: [Friends - Users]
+      responses:
+        '200':
+          description: List of friends
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+
+  /api/users/friends/{friendId}:
+    get:
+      summary: Get a specific friend's details
+      tags: [Friends - Users]
+      parameters:
+        - name: friendId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Friend details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  # Friend Tree Endpoints
+  /api/trees/friends/{friendId}:
+    get:
+      summary: Get all trees for a friend
+      tags: [Friends - Trees]
+      parameters:
+        - name: friendId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of friend's trees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TreeSummary'
+
+  /api/trees/friends/{friendId}/trees/{treeId}:
+    get:
+      summary: Get a specific friend's tree layout
+      tags: [Friends - Trees]
+      parameters:
+        - name: friendId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: treeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Friend's tree layout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeLayout'
+
+  # Friend Feed Endpoints
+  /api/feed/friends:
+    get:
+      summary: Get friend activity feed
+      tags: [Friends - Feed]
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 14
+      responses:
+        '200':
+          description: Friend activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedItem'
+
+components:
+  schemas:
+    UserRequest:
+      type: object
+      required:
+        - displayName
+      properties:
+        displayName:
+          type: string
+        profilePictureUrl:
+          type: string
+          nullable: true
+
+    UserResponse:
+      type: object
+      properties:
+        displayName:
+          type: string
+        profilePictureUrl:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        firebaseId:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+        profilePictureUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TreeRequest:
+      type: object
+      required:
+        - name
+        - visibility
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+          enum: [PRIVATE, FRIENDS, PUBLIC, PRESET]
+
+    TreeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+          enum: [PRIVATE, FRIENDS, PUBLIC, PRESET]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Tree:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        name:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+          enum: [PRIVATE, FRIENDS, PUBLIC, PRESET]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TreeSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+          enum: [PRIVATE, FRIENDS, PUBLIC, PRESET]
+
+    TreeStats:
+      type: object
+      properties:
+        totalSkills:
+          type: integer
+        totalAchievements:
+          type: integer
+        completedAchievements:
+          type: integer
+        totalTimeSpent:
+          type: number
+
+    FavoriteTree:
+      type: object
+      properties:
+        treeId:
+          type: string
+        treeName:
+          type: string
+        totalTimeSpent:
+          type: number
+
+    MeTreeLayout:
+      type: object
+      properties:
+        skillLayout:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MeSkillLayout'
+        achievementLayout:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MeAchievementLayout'
+
+    TreeLayout:
+      type: object
+      properties:
+        skillLayout:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SkillLayout'
+        achievementLayout:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AchievementLayout'
+
+    MeSkillLayout:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+        backgroundUrl:
+          type: string
+        timeSpentHours:
+          type: number
+        parentSkillId:
+          type: string
+          nullable: true
+
+    SkillLayout:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+        backgroundUrl:
+          type: string
+        parentSkillId:
+          type: string
+          nullable: true
+
+    MeAchievementLayout:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+        backgroundUrl:
+          type: string
+        complete:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        prerequisites:
+          type: array
+          items:
+            type: string
+
+    AchievementLayout:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+        backgroundUrl:
+          type: string
+        complete:
+          type: boolean
+        prerequisites:
+          type: array
+          items:
+            type: string
+
+    SkillRequest:
+      type: object
+      required:
+        - treeId
+        - name
+        - timeSpentHours
+      properties:
+        id:
+          type: string
+        treeId:
+          type: string
+        name:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        timeSpentHours:
+          type: number
+          minimum: 0
+        parentSkillId:
+          type: string
+          nullable: true
+
+    SkillResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        treeId:
+          type: string
+        name:
+          type: string
+        backgroundUrl:
+          type: string
+        timeSpentHours:
+          type: number
+        parentSkillId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Skill:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        treeId:
+          type: string
+        name:
+          type: string
+        backgroundUrl:
+          type: string
+        timeSpentHours:
+          type: number
+        parentSkillId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AchievementRequest:
+      type: object
+      required:
+        - treeId
+        - title
+        - complete
+      properties:
+        id:
+          type: string
+        treeId:
+          type: string
+        title:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        prerequisites:
+          type: array
+          items:
+            type: string
+        complete:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AchievementResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        treeId:
+          type: string
+        title:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        prerequisites:
+          type: array
+          items:
+            type: string
+        complete:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Achievement:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        treeId:
+          type: string
+        title:
+          type: string
+        backgroundUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        prerequisites:
+          type: array
+          items:
+            type: string
+        complete:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ActivityRequest:
+      type: object
+      required:
+        - name
+        - duration
+        - skillWeights
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        duration:
+          type: number
+          minimum: 0
+        skillWeights:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillWeight'
+
+    ActivityResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        duration:
+          type: number
+        weightedSkills:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeightedSkill'
+
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        duration:
+          type: number
+        skillWeights:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillWeight'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SkillWeight:
+      type: object
+      properties:
+        skillId:
+          type: string
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    WeightedSkill:
+      type: object
+      properties:
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+        skillName:
+          type: string
+        backgroundUrl:
+          type: string
+
+    RecentActivity:
+      type: object
+      properties:
+        streak:
+          type: integer
+        dailyActivity:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              totalDuration:
+                type: number
+
+    OrientationRequest:
+      type: object
+      properties:
+        skillLocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillLocation'
+        achievementLocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AchievementLocation'
+
+    Orientation:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        treeId:
+          type: string
+        skillLocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillLocation'
+        achievementLocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AchievementLocation'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SkillLocation:
+      type: object
+      properties:
+        skillId:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+
+    AchievementLocation:
+      type: object
+      properties:
+        achievementId:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+
+    FriendList:
+      type: object
+      properties:
+        accepted:
+          type: array
+          items:
+            $ref: '#/components/schemas/FriendshipInfo'
+        pending:
+          type: array
+          items:
+            $ref: '#/components/schemas/FriendshipInfo'
+        blocked:
+          type: array
+          items:
+            $ref: '#/components/schemas/FriendshipInfo'
+
+    FriendshipInfo:
+      type: object
+      properties:
+        friendshipId:
+          type: string
+        userId:
+          type: string
+        displayName:
+          type: string
+        profilePictureUrl:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, BLOCKED]
+
+    Friend:
+      type: object
+      properties:
+        id:
+          type: string
+        requesterId:
+          type: string
+        addresseeId:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, BLOCKED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FeedItem:
+      type: object
+      properties:
+        postedAt:
+          type: string
+          format: date-time
+        displayName:
+          type: string
+        profilePictureUrl:
+          type: string
+        type:
+          type: string
+          enum: [ACTIVITY, ACHIEVEMENT, TREE]
+      discriminator:
+        propertyName: type
+        mapping:
+          ACTIVITY: '#/components/schemas/ActivityFeedItem'
+          ACHIEVEMENT: '#/components/schemas/AchievementFeedItem'
+          TREE: '#/components/schemas/TreeFeedItem'
+
+    ActivityFeedItem:
+      allOf:
+        - $ref: '#/components/schemas/FeedItem'
+        - type: object
+          properties:
+            name:
+              type: string
+            duration:
+              type: number
+            description:
+              type: string
+              nullable: true
+            weightedSkills:
+              type: array
+              items:
+                $ref: '#/components/schemas/WeightedSkill'
+
+    AchievementFeedItem:
+      allOf:
+        - $ref: '#/components/schemas/FeedItem'
+        - type: object
+          properties:
+            title:
+              type: string
+            backgroundUrl:
+              type: string
+
+    TreeFeedItem:
+      allOf:
+        - $ref: '#/components/schemas/FeedItem'
+        - type: object
+          properties:
+            treeName:
+              type: string
+            backgroundUrl:
+              type: string
