@@ -1,16 +1,21 @@
 package com.bproj.skilltree.dto;
 
+import com.bproj.skilltree.util.RegexPatterns;
 import jakarta.annotation.Nullable;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 /**
  * Used to display top-level Tree information to Friends. Hidden fields are Id and Visibility.
  */
 public class TreeSummary {
-  @NotBlank
+  @Pattern(regexp = RegexPatterns.TREE_NAME)
+  @NotNull
   private String name;
-  @NotBlank
+  @Pattern(regexp = RegexPatterns.IMAGE_URL)
+  @Nullable
   private String backgroundUrl;
+  @Pattern(regexp = RegexPatterns.TREE_DESCRIPTION)
   @Nullable
   private String description;
   

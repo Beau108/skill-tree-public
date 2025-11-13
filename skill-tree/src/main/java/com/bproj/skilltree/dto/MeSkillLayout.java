@@ -1,30 +1,18 @@
 package com.bproj.skilltree.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PositiveOrZero;
 import org.bson.types.ObjectId;
 
 /**
  * Information required for rendering a single Skill plus the Id for editing/deleting purposes.
  */
 public class MeSkillLayout {
-  @NotNull
-  private ObjectId id;
-
-  @NotBlank
+  private String id;
   private String name;
-
   private double x;
-
   private double y;
-
   private String backgroundUrl;
-
-  @PositiveOrZero
   private double timeSpentHours;
-
-  private ObjectId parentSkillId;
+  private String parentSkillId;
 
   /**
    * Explicit value constructor.
@@ -37,8 +25,8 @@ public class MeSkillLayout {
    * @param timeSpentHours The time the User has logged for this skill
    * @param parentSkillId The parent id of this skill
    */
-  public MeSkillLayout(ObjectId id, String name, double x, double y, String backgroundUrl,
-      double timeSpentHours, ObjectId parentSkillId) {
+  public MeSkillLayout(String id, String name, double x, double y, String backgroundUrl,
+      double timeSpentHours, String parentSkillId) {
     this.id = id;
     this.name = name;
     this.x = x;
@@ -48,11 +36,11 @@ public class MeSkillLayout {
     this.parentSkillId = parentSkillId;
   }
 
-  public ObjectId getId() {
+  public String getId() {
     return id;
   }
 
-  public void setId(ObjectId id) {
+  public void setId(String id) {
     this.id = id;
   }
 
@@ -96,11 +84,11 @@ public class MeSkillLayout {
     this.timeSpentHours = timeSpentHours;
   }
 
-  public ObjectId getParentSkillId() {
+  public String getParentSkillId() {
     return parentSkillId;
   }
 
-  public void setParentSkillId(ObjectId parentSkillId) {
+  public void setParentSkillId(String parentSkillId) {
     this.parentSkillId = parentSkillId;
   }
 }

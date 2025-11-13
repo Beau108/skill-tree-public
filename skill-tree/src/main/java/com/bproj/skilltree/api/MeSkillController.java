@@ -7,14 +7,17 @@ import com.bproj.skilltree.mapper.SkillMapper;
 import com.bproj.skilltree.model.Skill;
 import com.bproj.skilltree.model.SkillSortMode;
 import com.bproj.skilltree.service.SkillService;
-import com.bproj.skilltree.service.UserService;
 import com.bproj.skilltree.util.AuthUtils;
 import com.bproj.skilltree.util.ObjectIdUtils;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
+import jakarta.json.JsonMergePatch;
+import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
+
 import org.bson.types.ObjectId;
-import org.springframework.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,7 +25,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,12 +36,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/skills/me")
 public class MeSkillController {
+  private static final Logger logger = LoggerFactory.getLogger(MeSkillController.class);
   private final SkillService skillService;
   private final AuthUtils authUtils;
 
-  public MeSkillController(SkillService skillService, UserService userService) {
+  public MeSkillController(SkillService skillService, AuthUtils authUtils) {
     this.skillService = skillService;
-    this.authUtils = new AuthUtils(userService);
+    this.authUtils = authUtils;
   }
 
   /**
@@ -51,16 +54,13 @@ public class MeSkillController {
    */
   @PostMapping
   public ResponseEntity<SkillResponse> create(Authentication auth,
-      @RequestBody SkillRequest skillRequest) {
-    if (skillRequest == null) {
-      throw new BadRequestException("Request body cannot be null.");
-    }
+      @Valid @RequestBody SkillRequest skillRequest) {
+    logger.info("POST /api/skills/me - create(skillRequest={})", skillRequest);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     Skill skill = SkillMapper.toSkill(skillRequest);
-    skill.setUserId(userId);
-    SkillResponse createdSkill = skillService.createResponse(userId, skill);
-    return ResponseEntity.created(URI.create("/api/skills/me/" + createdSkill.getId()))
-        .body(createdSkill);
+    SkillResponse skillResponse = SkillMapper.fromSkill(skillService.create(skill, userId));
+    return ResponseEntity.created(URI.create("/api/skills/me/" + skillResponse.getId()))
+        .body(skillResponse);
   }
 
   /**
@@ -76,8 +76,9 @@ public class MeSkillController {
   public ResponseEntity<List<SkillResponse>> mySkills(Authentication auth,
       @RequestParam(required = false) Boolean root,
       @RequestParam(required = false) String parentSkillId,
-      @RequestParam(required = false) SkillSortMode sortMode) {
-
+      @RequestParam(required = false, defaultValue = "NAME") SkillSortMode sortMode) {
+    logger.info("GET /api/skills/me - mySkills(root={}, parentSkillId={}, sortMode={})", root,
+        parentSkillId, sortMode);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId parentObjectId = null;
     if (parentSkillId != null) {
@@ -87,9 +88,10 @@ public class MeSkillController {
       throw new BadRequestException(
           "Query parameters 'parentSkillId' and 'root' cannot be used together.");
     }
-    List<SkillResponse> skills =
-        skillService.responseQuery(userId, parentObjectId, root, sortMode);
-    return new ResponseEntity<>(skills, HttpStatus.OK);
+    List<SkillResponse> skillResponses =
+        skillService.findAndSortSkills(userId, parentObjectId, root, sortMode).stream()
+            .map(SkillMapper::fromSkill).toList();
+    return ResponseEntity.ok(skillResponses);
   }
 
   /**
@@ -101,31 +103,12 @@ public class MeSkillController {
    */
   @GetMapping("/{skillId}")
   public ResponseEntity<SkillResponse> mySkill(Authentication auth, @PathVariable String skillId) {
+    logger.info("GET /api/skills/me/{} - mySkill(skillId={})", skillId, skillId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId skillObjectId = ObjectIdUtils.validateObjectId(skillId, "skillId");
-    return ResponseEntity.ok(skillService.getResponseByUserIdAndId(userId, skillObjectId));
-  }
-
-  /**
-   * Update a Skill for this User.
-   *
-   * @param auth JWT
-   * @param skillId The Id of the Skill being updated
-   * @param updatedSkill The new version of the Skill
-   * @return The SkillResponse DTO of the updated Skill
-   */
-  @PutMapping("/{skillId}")
-  public ResponseEntity<SkillResponse> update(Authentication auth, @PathVariable String skillId,
-      @RequestBody SkillRequest updatedSkill) {
-    if (updatedSkill == null) {
-      throw new BadRequestException("Request body cannot be null.");
-    }
-    ObjectId userId = authUtils.getUserIdByAuth(auth);
-    ObjectId skillObjectId = ObjectIdUtils.validateObjectId(skillId, "skillId");
-    Skill skill = SkillMapper.toSkill(updatedSkill);
-    skill.setUserId(userId);
-    SkillResponse result = skillService.updateResponse(userId, skillObjectId, skill);
-    return ResponseEntity.ok(result);
+    SkillResponse skillResponse =
+        SkillMapper.fromSkill(skillService.findByUserIdAndId(userId, skillObjectId));
+    return ResponseEntity.ok(skillResponse);
   }
 
   /**
@@ -136,14 +119,16 @@ public class MeSkillController {
    * @param updates The updates to be applied to the Skill
    * @return The SkillResponse DTO of the updated Skill
    */
-  @PatchMapping(path = "/{skillId}", consumes = "application/merge-patch+json")
+  @PatchMapping(path = "/{skillId}")
   public ResponseEntity<SkillResponse> patch(Authentication auth, @PathVariable String skillId,
-      @RequestBody JsonMergePatch updates) {
-
+      @RequestBody Map<String, Object> updates) {
+    logger.info("PATCH /api/skills/me/{} - patch(skillId={}, updates={})", skillId, skillId,
+        updates);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId skillObjectId = ObjectIdUtils.validateObjectId(skillId, "skillId");
-    SkillResponse updatedSkill = skillService.patchResponse(userId, skillObjectId, updates);
-    return ResponseEntity.ok(updatedSkill);
+    SkillResponse skillResponse =
+        SkillMapper.fromSkill(skillService.patch(userId, skillObjectId, updates));
+    return ResponseEntity.ok(skillResponse);
   }
 
   /**
@@ -155,6 +140,7 @@ public class MeSkillController {
    */
   @DeleteMapping("/{skillId}")
   public ResponseEntity<Void> deleteById(Authentication auth, @PathVariable String skillId) {
+    logger.info("DELETE /api/skills/me/{} - deleteById(skillId={})", skillId, skillId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId skillObjectId = ObjectIdUtils.validateObjectId(skillId, "skillId");
     skillService.deleteByUserIdAndId(userId, skillObjectId);
@@ -169,6 +155,7 @@ public class MeSkillController {
    */
   @DeleteMapping
   public ResponseEntity<Void> deleteByUserId(Authentication auth) {
+    logger.info("DELETE /api/skills/me - deleteByUserId()");
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     skillService.deleteByUserId(userId);
     return ResponseEntity.noContent().build();

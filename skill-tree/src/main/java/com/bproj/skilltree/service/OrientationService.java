@@ -1,35 +1,36 @@
 package com.bproj.skilltree.service;
 
-import com.bproj.skilltree.dao.AchievementRepository;
-import com.bproj.skilltree.dao.OrientationRepository;
-import com.bproj.skilltree.dao.SkillRepository;
-import com.bproj.skilltree.dao.TreeRepository;
-import com.bproj.skilltree.dao.UserRepository;
+import com.bproj.skilltree.dao.*;
+import com.bproj.skilltree.dto.OrientationMovePatch;
 import com.bproj.skilltree.exception.BadRequestException;
 import com.bproj.skilltree.exception.NotFoundException;
 import com.bproj.skilltree.model.AchievementLocation;
 import com.bproj.skilltree.model.Orientation;
 import com.bproj.skilltree.model.SkillLocation;
-import com.bproj.skilltree.util.JsonMergePatchUtils;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import com.bproj.skilltree.util.PatchUtils;
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Implements business logic for 'orientations' collection.
  */
 @Service
 public class OrientationService {
+  private static final Logger logger = LoggerFactory.getLogger(OrientationService.class);
   private final OrientationRepository orientationRepository;
   private final TreeRepository treeRepository;
   private final SkillRepository skillRepository;
   private final AchievementRepository achievementRepository;
   private final UserRepository userRepository;
+
 
   /**
    * Create an OrientationService.
@@ -66,13 +67,14 @@ public class OrientationService {
 
     // userId
     if (!userRepository.existsById(userId)) {
-      throw new BadRequestException("userId must point to an existing user.");
+      throw new BadRequestException("Orientation must reference an existing user.");
     }
 
     // treeId
     ObjectId treeId = orientation.getTreeId();
     if (!treeRepository.existsByUserIdAndId(userId, treeId)) {
-      throw new BadRequestException("treeId must point to an existing tree owned by userId");
+      throw new BadRequestException(
+          "Orientation must reference an existing tree owned by the user.");
     }
 
     // skillLocations
@@ -80,10 +82,10 @@ public class OrientationService {
     for (SkillLocation sl : skillLocations) {
       if (!skillRepository.existsByUserIdAndId(userId, sl.getSkillId())) {
         throw new BadRequestException(
-            "SkillLocation skillId must reference an existing skill owned by userId.");
+            "Skill location must reference an existing skill owned by the user.");
       }
       if (sl.getX() < 0 || sl.getY() < 0) {
-        throw new BadRequestException("X and Y location must be > 0.");
+        throw new BadRequestException("X and Y coordinates must be greater than or equal to 0.");
       }
     }
 
@@ -92,20 +94,17 @@ public class OrientationService {
     for (AchievementLocation al : achievementLocations) {
       if (!achievementRepository.existsByUserIdAndId(userId, al.getAchievementId())) {
         throw new BadRequestException(
-            "AchievementLocation achievementId must reference an existing skill owned by userId.");
+            "Achievement location must reference an existing achievement owned by the user.");
       }
       if (al.getX() < 0 || al.getY() < 0) {
-        throw new BadRequestException("X and Y location must be > 0.");
+        throw new BadRequestException("X and Y coordinates must be greater than or equal to 0.");
       }
     }
   }
 
-  public Orientation create(Orientation orientation) {
-    validateOrientation(orientation);
-    return orientationRepository.insert(orientation);
-  }
-
   public boolean existsById(ObjectId orientationId) {
+    logger.info("existsById(orientationId={})", orientationId);
+    logger.info("orientationRepository.existsById(orientationId={})", orientationId);
     return orientationRepository.existsById(orientationId);
   }
 
@@ -116,9 +115,12 @@ public class OrientationService {
    * @return The Orientation associated with the provided Id. Throws NFE otherwise
    */
   public Orientation findById(ObjectId orientationId) {
+    logger.info("findById(orientationId={})", orientationId);
+    logger.info("orientationRepository.findById(orientationId={})", orientationId);
     Optional<Orientation> optionalOrientation = orientationRepository.findById(orientationId);
     if (optionalOrientation.isEmpty()) {
-      throw new NotFoundException(Map.of("orientationId", orientationId.toString()));
+      throw new NotFoundException("orientations",
+          Map.of("orientationId", orientationId.toString()));
     }
     return optionalOrientation.get();
   }
@@ -131,8 +133,10 @@ public class OrientationService {
    * @return The Orientation matching userId and Id. Throws NFE otherwise.
    */
   public Orientation findByUserIdAndId(ObjectId userId, ObjectId orientationId) {
+    logger.info("findByUserIdAndId(userId={}, orientationId={})", userId, orientationId);
+    logger.info("orientationRepository.findByUserIdAndId(userId={}, orientationId={})", userId, orientationId);
     Orientation orientation = orientationRepository.findByUserIdAndId(userId, orientationId)
-        .orElseThrow(() -> new NotFoundException(
+        .orElseThrow(() -> new NotFoundException("orientations",
             Map.of("userId", userId.toString(), "orientationId", orientationId.toString())));
     return orientation;
   }
@@ -144,9 +148,12 @@ public class OrientationService {
    * @return A list of the specified User's Orientations
    */
   public List<Orientation> findByUserId(ObjectId userId) {
+    logger.info("findByUserId(userId={})", userId);
+    logger.info("userRepository.existsById(userId={})", userId);
     if (!userRepository.existsById(userId)) {
-      throw new NotFoundException(Map.of("userId", userId.toString()));
+      throw new NotFoundException("users", Map.of("userId", userId.toString()));
     }
+    logger.info("orientationRepository.findByUserId(userId={})", userId);
     return orientationRepository.findByUserId(userId);
   }
 
@@ -158,11 +165,15 @@ public class OrientationService {
    * @return The Orientation with userId and treeId matching
    */
   public Orientation findByUserIdAndTreeId(ObjectId userId, ObjectId treeId) {
+    logger.info("findByUserIdAndTreeId(userId={}, treeId={})", userId, treeId);
+    logger.info("treeRepository.existsByUserIdAndId(userId={}, treeId={})", userId, treeId);
     if (!treeRepository.existsByUserIdAndId(userId, treeId)) {
-      throw new NotFoundException(Map.of("userId", userId.toString(), "treeId", treeId.toString()));
+      throw new NotFoundException("trees",
+          Map.of("userId", userId.toString(), "treeId", treeId.toString()));
     }
+    logger.info("orientationRepository.findByUserIdAndTreeId(userId={}, treeId={})", userId, treeId);
     return orientationRepository.findByUserIdAndTreeId(userId, treeId)
-        .orElseThrow(() -> new NotFoundException(
+        .orElseThrow(() -> new NotFoundException("orientations",
             Map.of("userId", userId.toString(), "treeId", treeId.toString())));
   }
 
@@ -175,9 +186,16 @@ public class OrientationService {
    * @return The updated Orientation
    */
   public Orientation update(ObjectId userId, ObjectId treeId, Orientation updatedOrientation) {
+    logger.info("update(userId={}, treeId={}, updatedOrientation={})", userId, treeId, updatedOrientation);
+    logger.info("orientationRepository.findByUserIdAndTreeId(userId={}, treeId={})", userId, treeId);
+    Orientation existingOrientation = orientationRepository.findByUserIdAndTreeId(userId, treeId)
+        .orElseThrow(() -> new NotFoundException("orientations",
+            Map.of("userId", userId.toString(), "treeId", treeId.toString())));
     updatedOrientation.setUserId(userId);
     updatedOrientation.setTreeId(treeId);
+    updatedOrientation.setId(existingOrientation.getId());
     validateOrientation(updatedOrientation);
+    logger.info("orientationRepository.save(updatedOrientation={})", updatedOrientation);
     return orientationRepository.save(updatedOrientation);
   }
 
@@ -189,21 +207,33 @@ public class OrientationService {
    * @param updates The updates to be applied to the Orientation
    * @return The updated Orientation.
    */
-  public Orientation patch(ObjectId userId, ObjectId treeId, JsonMergePatch updates) {
-    Orientation updated = JsonMergePatchUtils.applyMergePatch(updates,
-        findByUserIdAndTreeId(userId, treeId), Orientation.class);
-    validateOrientation(updated);
+  public Orientation patch(ObjectId userId, ObjectId treeId, List<OrientationMovePatch> updates) {
+    logger.info("patch(userId={}, treeId={}, updates={})", userId, treeId, updates);
+    Orientation existingOrientation = findByUserIdAndTreeId(userId, treeId);
+    Orientation updated = PatchUtils.applyOrientationPatch(existingOrientation, updates);
     updated.setUserId(userId);
     updated.setTreeId(treeId);
+    updated.setId(existingOrientation.getId());
+    validateOrientation(updated);
+    logger.info("orientationRepository.save(updated={})", updated);
     return orientationRepository.save(updated);
-
   }
 
   public void deleteById(ObjectId id) {
+    logger.info("deleteById(id={})", id);
+    logger.info("orientationRepository.deleteById(id={})", id);
     orientationRepository.deleteById(id);
   }
 
   public void deleteByUserId(ObjectId userId) {
+    logger.info("deleteByUserId(userId={})", userId);
+    logger.info("orientationRepository.deleteByUserId(userId={})", userId);
     orientationRepository.deleteByUserId(userId);
+  }
+
+  public void deleteByTreeId(ObjectId treeId) {
+    logger.info("deleteByTreeId(treeId={})", treeId);
+    logger.info("orientationRepository.deleteByTreeId(treeId={})", treeId);
+    orientationRepository.deleteByTreeId(treeId);
   }
 }

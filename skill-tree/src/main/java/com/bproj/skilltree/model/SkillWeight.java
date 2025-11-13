@@ -5,17 +5,21 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 
 /**
  * For Activities, the proportion of how much a specific skill was used.
  */
+@ToString(onlyExplicitlyIncluded = true)
 public class SkillWeight {
   @NotNull
+  @ToString.Include
   private ObjectId skillId;
   @NotNull
   @Min(0)
   @Max(1)
+  @ToString.Include
   private double weight;
 
   public SkillWeight() {

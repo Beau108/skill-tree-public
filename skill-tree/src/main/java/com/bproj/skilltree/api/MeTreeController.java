@@ -8,13 +8,16 @@ import com.bproj.skilltree.dto.TreeStats;
 import com.bproj.skilltree.mapper.TreeMapper;
 import com.bproj.skilltree.model.Tree;
 import com.bproj.skilltree.service.TreeService;
-import com.bproj.skilltree.service.UserService;
 import com.bproj.skilltree.util.AuthUtils;
 import com.bproj.skilltree.util.ObjectIdUtils;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
+import jakarta.json.JsonMergePatch;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
+
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -23,7 +26,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,12 +36,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/trees/me")
 public class MeTreeController {
+  private static final Logger logger = LoggerFactory.getLogger(MeTreeController.class);
   private final TreeService treeService;
   private final AuthUtils authUtils;
 
-  public MeTreeController(TreeService treeService, UserService userService) {
+  public MeTreeController(TreeService treeService, AuthUtils authUtils) {
     this.treeService = treeService;
-    this.authUtils = new AuthUtils(userService);
+    this.authUtils = authUtils;
   }
 
   /**
@@ -53,10 +56,12 @@ public class MeTreeController {
   @PostMapping
   public ResponseEntity<TreeResponse> create(Authentication auth,
       @Valid @RequestBody TreeRequest treeRequest) {
+    logger.info("POST /api/trees/me - create(treeRequest={})", treeRequest);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     Tree tree = TreeMapper.toTree(treeRequest);
-    tree.setUserId(userId);
-    return ResponseEntity.status(HttpStatus.CREATED).body(treeService.createResponse(tree));
+    TreeResponse treeResponse = TreeMapper.fromTree(treeService.create(tree, userId));
+    logger.error("Returning TreeResponse with id={}", treeResponse.getId());
+    return ResponseEntity.status(HttpStatus.CREATED).body(treeResponse);
   }
 
   /**
@@ -66,10 +71,12 @@ public class MeTreeController {
    * @return The List of the authed user's Trees.
    */
   @GetMapping
-  public ResponseEntity<List<TreeResponse>> findMyTrees(Authentication auth) {
+  public ResponseEntity<List<TreeResponse>> getCurrentUserTrees(Authentication auth) {
+    logger.info("GET /api/trees/me - getCurrentUserTrees()");
     ObjectId userId = authUtils.getUserIdByAuth(auth);
-    List<TreeResponse> trees = treeService.getResponsesByUserId(userId);
-    return ResponseEntity.ok(trees);
+    List<TreeResponse> treeResponses =
+        treeService.findByUserId(userId).stream().map(TreeMapper::fromTree).toList();
+    return ResponseEntity.ok(treeResponses);
   }
 
   /**
@@ -80,30 +87,15 @@ public class MeTreeController {
    * @return Tree DTO
    */
   @GetMapping("/{treeId}")
-  public ResponseEntity<TreeResponse> findOneTree(Authentication auth,
+  public ResponseEntity<TreeResponse> getTreeById(Authentication auth,
       @PathVariable String treeId) {
+    logger.info("GET /api/trees/me/{} - getTreeById(treeId={})", treeId, treeId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId treeObjectId = ObjectIdUtils.validateObjectId(treeId, "treeId");
-    TreeResponse treeResponse = treeService.getResponseByUserIdAndId(userId, treeObjectId);
+    TreeResponse treeResponse =
+        TreeMapper.fromTree(treeService.findByUserIdAndId(userId, treeObjectId));
+    logger.info(treeResponse.getId());
     return ResponseEntity.ok(treeResponse);
-  }
-
-  /**
-   * Fully update a Tree belonging to the authed user.
-   *
-   * @param auth JWT
-   * @param treeId Id of the Tree being updated
-   * @param treeRequest The information of the updated Tree
-   * @return The updated Tree DTO
-   */
-  @PutMapping("/{treeId}")
-  public ResponseEntity<TreeResponse> update(Authentication auth, @PathVariable String treeId,
-      @Valid @RequestBody TreeRequest treeRequest) {
-    ObjectId userId = authUtils.getUserIdByAuth(auth);
-    ObjectId treeObjectId = ObjectIdUtils.validateObjectId(treeId, "treeId");
-    Tree tree = TreeMapper.toTree(treeRequest);
-    TreeResponse response = treeService.updateResponse(userId, treeObjectId, tree);
-    return ResponseEntity.ok(response);
   }
 
   /**
@@ -114,13 +106,15 @@ public class MeTreeController {
    * @param updates Updates to be applied to the Tree
    * @return The Tree DTO
    */
-  @PatchMapping(path = "/{treeId}", consumes = "application/merge-patch+json")
+  @PatchMapping(path = "/{treeId}")
   public ResponseEntity<TreeResponse> patch(Authentication auth, @PathVariable String treeId,
-      @RequestBody JsonMergePatch updates) {
+      @RequestBody Map<String, Object> updates) {
+    logger.info("PATCH /api/trees/me/{} - patch(treeId={}, updates={})", treeId, treeId, updates);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId treeObjectId = ObjectIdUtils.validateObjectId(treeId, "treeId");
-    TreeResponse response = treeService.patchResponse(userId, treeObjectId, updates);
-    return ResponseEntity.ok(response);
+    TreeResponse treeResponse =
+        TreeMapper.fromTree(treeService.patch(userId, treeObjectId, updates));
+    return ResponseEntity.ok(treeResponse);
   }
 
   /**
@@ -131,15 +125,17 @@ public class MeTreeController {
    * @return The MeTreeLayout DTO
    */
   @GetMapping("/layout/{treeId}")
-  public ResponseEntity<MeTreeLayout> loadTreeLayout(Authentication auth,
+  public ResponseEntity<MeTreeLayout> getTreeLayout(Authentication auth,
       @PathVariable String treeId) {
+    logger.info("GET /api/trees/me/layout/{} - getTreeLayout(treeId={})", treeId, treeId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId treeObjectId = ObjectIdUtils.validateObjectId(treeId, "treeId");
     return ResponseEntity.ok(treeService.getMeLayoutByUserIdAndId(userId, treeObjectId));
   }
 
   @GetMapping("/stats")
-  public ResponseEntity<TreeStats> getAggregateStats(Authentication auth) {
+  public ResponseEntity<TreeStats> getAggregatedTreeStats(Authentication auth) {
+    logger.info("GET /api/trees/me/stats - getAggregatedTreeStats()");
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     return ResponseEntity.ok(treeService.getStatsByUserId(userId));
   }
@@ -152,8 +148,8 @@ public class MeTreeController {
    * @return The TreeStats response for the given Tree
    */
   @GetMapping("/stats/{treeId}")
-  public ResponseEntity<TreeStats> getSingleStats(Authentication auth,
-      @PathVariable String treeId) {
+  public ResponseEntity<TreeStats> getTreeStats(Authentication auth, @PathVariable String treeId) {
+    logger.info("GET /api/trees/me/stats/{} - getTreeStats(treeId={})", treeId, treeId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId treeObjectId = ObjectIdUtils.validateObjectId(treeId, "treeId");
     return ResponseEntity.ok(treeService.getStatsByUserIdAndId(userId, treeObjectId));
@@ -161,6 +157,7 @@ public class MeTreeController {
 
   @GetMapping("/favorite")
   public ResponseEntity<FavoriteTree> getFavoriteTree(Authentication auth) {
+    logger.info("GET /api/trees/me/favorite - getFavoriteTree()");
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     return ResponseEntity.ok(treeService.getFavoriteTree(userId));
   }
@@ -173,7 +170,8 @@ public class MeTreeController {
    * @return HttpStatus.NO_CONTENT
    */
   @DeleteMapping("/{treeId}")
-  public ResponseEntity<Void> deleteOneTree(Authentication auth, @PathVariable String treeId) {
+  public ResponseEntity<Void> deleteTreeById(Authentication auth, @PathVariable String treeId) {
+    logger.info("DELETE /api/trees/me/{} - deleteTreeById(treeId={})", treeId, treeId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId treeObjectId = ObjectIdUtils.validateObjectId(treeId, "treeId");
     treeService.deleteByUserIdAndId(userId, treeObjectId);
@@ -187,7 +185,8 @@ public class MeTreeController {
    * @return HttpStatus.NO_CONTENT
    */
   @DeleteMapping
-  public ResponseEntity<Void> deleteMyTrees(Authentication auth) {
+  public ResponseEntity<Void> deleteAllUserTrees(Authentication auth) {
+    logger.info("DELETE /api/trees/me - deleteAllUserTrees()");
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     treeService.deleteByUserId(userId);
     return ResponseEntity.noContent().build();

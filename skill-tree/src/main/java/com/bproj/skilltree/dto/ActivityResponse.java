@@ -9,7 +9,7 @@ import org.bson.types.ObjectId;
  * Outgoing essential Activity information. Uses WeightedSkills to avoid lookups on the client side.
  */
 public class ActivityResponse {
-  private ObjectId id;
+  private String id;
   private String name;
   private String description;
   private double duration;
@@ -25,7 +25,7 @@ public class ActivityResponse {
    * @param weightedSkills List of weighted Skills with full Skill information
    */
   @JsonCreator
-  public ActivityResponse(@JsonProperty("id") ObjectId id, @JsonProperty("name") String name,
+  public ActivityResponse(@JsonProperty("id") String id, @JsonProperty("name") String name,
       @JsonProperty("description") String description, @JsonProperty("duration") double duration,
       @JsonProperty("weightedSkills") List<WeightedSkill> weightedSkills) {
     this.id = id;
@@ -35,11 +35,11 @@ public class ActivityResponse {
     this.weightedSkills = weightedSkills;
   }
 
-  public ObjectId getId() {
+  public String getId() {
     return id;
   }
 
-  public void setId(ObjectId id) {
+  public void setId(String id) {
     this.id = id;
   }
 

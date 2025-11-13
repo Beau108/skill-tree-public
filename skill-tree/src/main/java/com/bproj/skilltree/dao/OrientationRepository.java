@@ -21,4 +21,6 @@ public interface OrientationRepository extends MongoRepository<Orientation, Obje
   List<Orientation> findByUserId(ObjectId userId);
   
   void deleteByUserId(ObjectId userId);
+  
+  void deleteByTreeId(ObjectId treeId);
 }

@@ -9,23 +9,23 @@ import com.bproj.skilltree.mapper.FriendshipMapper;
 import com.bproj.skilltree.model.FriendRequestStatus;
 import com.bproj.skilltree.model.Friendship;
 import com.bproj.skilltree.model.User;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-
-
 
 /**
  * Implements business logic for 'friends' collection.
  */
 @Service
 public class FriendshipService {
+  private static final Logger logger = LoggerFactory.getLogger(FriendshipService.class);
   private final FriendshipRepository friendshipRepository;
   private final UserRepository userRepository;
 
@@ -49,15 +49,15 @@ public class FriendshipService {
 
     // can't be friends with yourself
     if (requesterId.equals(addresseeId)) {
-      throw new BadRequestException("No friend relationships with yourself.");
+      throw new BadRequestException("Cannot create friend relationship with yourself.");
     }
 
     // both users exist
     if (!userRepository.existsById(requesterId)) {
-      throw new BadRequestException("requesterId must reference an existing user.");
+      throw new BadRequestException("Requester must reference an existing user.");
     }
     if (!userRepository.existsById(addresseeId)) {
-      throw new BadRequestException("addresseeId must reference an existing user.");
+      throw new BadRequestException("Addressee must reference an existing user.");
     }
 
     // this friendship doesnt already exist
@@ -65,19 +65,19 @@ public class FriendshipService {
       Friendship f =
           friendshipRepository.findByRequesterIdAndAddresseeId(requesterId, addresseeId).get();
       if (!f.getId().equals(friend.getId())) {
-        throw new BadRequestException("No duplicate friend requests.");
+        throw new BadRequestException("Friend request already exists.");
       }
     }
     if (friendshipRepository.existsByRequesterIdAndAddresseeId(addresseeId, requesterId)) {
       Friendship f =
           friendshipRepository.findByRequesterIdAndAddresseeId(addresseeId, requesterId).get();
       if (!f.getId().equals(friend.getId())) {
-        throw new BadRequestException("No duplicate friend requests.");
+        throw new BadRequestException("Friend request already exists.");
       }
     }
   }
 
-  private boolean friendshipExists(ObjectId user1, ObjectId user2) {
+  private boolean doesFriendshipExist(ObjectId user1, ObjectId user2) {
     Optional<Friendship> check1 =
         friendshipRepository.findByRequesterIdAndAddresseeId(user1, user2);
     Optional<Friendship> check2 =
@@ -93,25 +93,33 @@ public class FriendshipService {
    * @return The new Friendship relationship
    */
   public Friendship addFriend(ObjectId userId, String displayName) {
+    logger.info("addFriend(userId={}, displayName={})", userId, displayName);
+    logger.info("userRepository.findByDisplayName(displayName={})", displayName);
     ObjectId friendId = userRepository.findByDisplayName(displayName)
-        .orElseThrow(() -> new NotFoundException(Map.of("displayName", displayName))).getId();
-    if (friendshipExists(userId, friendId)) {
-      throw new BadRequestException("There is already a friend request for " + displayName);
+        .orElseThrow(() -> new NotFoundException("users", Map.of("displayName", displayName)))
+        .getId();
+    if (doesFriendshipExist(userId, friendId)) {
+      throw new BadRequestException("Friend request already exists.");
     }
     Friendship friendship = new Friendship();
     friendship.setAddresseeId(friendId);
     friendship.setRequesterId(userId);
     friendship.setStatus(FriendRequestStatus.PENDING);
     validateFriendship(friendship);
+    logger.info("friendshipRepository.insert(friendship={})", friendship);
     friendshipRepository.insert(friendship);
     return friendship;
   }
 
   public boolean existsById(ObjectId friendId) {
+    logger.info("existsById(friendId={})", friendId);
+    logger.info("friendshipRepository.existsById(friendId={})", friendId);
     return friendshipRepository.existsById(friendId);
   }
 
   public boolean existsByRequesterIdAndAddresseeId(ObjectId requesterId, ObjectId addresseeId) {
+    logger.info("existsByRequesterIdAndAddresseeId(requesterId={}, addresseeId={})", requesterId, addresseeId);
+    logger.info("friendshipRepository.existsByRequesterIdAndAddresseeId(requesterId={}, addresseeId={})", requesterId, addresseeId);
     return friendshipRepository.existsByRequesterIdAndAddresseeId(requesterId, addresseeId);
   }
 
@@ -122,9 +130,11 @@ public class FriendshipService {
    * @return The Friend. Throws NFE otherwise.
    */
   public Friendship findById(ObjectId friendId) {
+    logger.info("findById(friendId={})", friendId);
+    logger.info("friendshipRepository.findById(friendId={})", friendId);
     Optional<Friendship> optionalFriend = friendshipRepository.findById(friendId);
     if (optionalFriend.isEmpty()) {
-      throw new NotFoundException(Map.of("friendId", friendId.toString()));
+      throw new NotFoundException("friendships", Map.of("friendshipId", friendId.toString()));
     }
     return optionalFriend.get();
   }
@@ -137,16 +147,16 @@ public class FriendshipService {
    * @return The Friend between the two Users. Throws NFE otherwise.
    */
   public Friendship findByRequesterIdAndAddresseeId(ObjectId requesterId, ObjectId addresseeId) {
-    Optional<Friendship> optionalFriend =
-        friendshipRepository.findByRequesterIdAndAddresseeId(requesterId, addresseeId);
-    if (optionalFriend.isEmpty()) {
-      throw new NotFoundException(
-          Map.of("requesterId", requesterId.toString(), "addresseeId", addresseeId.toString()));
-    }
-    return optionalFriend.get();
+    logger.info("findByRequesterIdAndAddresseeId(requesterId={}, addresseeId={})", requesterId, addresseeId);
+    logger.info("friendshipRepository.findByRequesterIdAndAddresseeId(requesterId={}, addresseeId={})", requesterId, addresseeId);
+    return friendshipRepository.findByRequesterIdAndAddresseeId(requesterId, addresseeId)
+        .orElseThrow(() -> new NotFoundException("friendships",
+            Map.of("requesterId", requesterId.toString(), "addresseeId", addresseeId.toString())));
   }
 
   public List<Friendship> findAll() {
+    logger.info("findAll()");
+    logger.info("friendshipRepository.findAll()");
     return friendshipRepository.findAll();
   }
 
@@ -157,6 +167,8 @@ public class FriendshipService {
    * @return List of Friends.
    */
   public List<Friendship> findByUserId(ObjectId userId) {
+    logger.info("findByUserId(userId={})", userId);
+    logger.info("friendshipRepository.findByRequesterIdOrAddresseeId(userId={}, userId={})", userId, userId);
     List<Friendship> res = new ArrayList<>();
     res.addAll(friendshipRepository.findByRequesterIdOrAddresseeId(userId, userId));
     return res;
@@ -170,10 +182,12 @@ public class FriendshipService {
    * @return A list of Friends of the User with Status=status (if status was provided)
    */
   public List<Friendship> findByUserId(ObjectId userId, FriendRequestStatus status) {
+    logger.info("findByUserId(userId={}, status={})", userId, status);
     List<Friendship> friends = findByUserId(userId);
     if (status == null) {
       return friends;
     }
+    logger.info("friendshipRepository.findByRequesterIdOrAddresseeIdAndStatus(userId={}, userId={}, status={})", userId, userId, status);
     return friendshipRepository.findByRequesterIdOrAddresseeIdAndStatus(userId, userId, status);
   }
 
@@ -184,6 +198,8 @@ public class FriendshipService {
    * @return List of Ids belonging to that User's friends.
    */
   public List<ObjectId> getFriendIds(ObjectId userId) {
+    logger.info("getFriendIds(userId={})", userId);
+    logger.info("friendshipRepository.findByRequesterIdOrAddresseeIdAndStatus(userId={}, userId={}, status=ACCEPTED)", userId, userId);
     List<Friendship> accepted = friendshipRepository.findByRequesterIdOrAddresseeIdAndStatus(userId,
         userId, FriendRequestStatus.ACCEPTED);
     List<ObjectId> friendIds = new ArrayList<ObjectId>();
@@ -205,6 +221,9 @@ public class FriendshipService {
    * @return True if the users are friends, false otherwise.
    */
   public boolean areFriends(ObjectId user1, ObjectId user2) {
+    logger.info("areFriends(user1={}, user2={})", user1, user2);
+    logger.info("friendshipRepository.existsByRequesterIdAndAddresseeIdAndStatus(user1={}, user2={}, status=ACCEPTED)", user1, user2);
+    logger.info("friendshipRepository.existsByRequesterIdAndAddresseeIdAndStatus(user2={}, user1={}, status=ACCEPTED)", user2, user1);
     return friendshipRepository.existsByRequesterIdAndAddresseeIdAndStatus(user1, user2,
         FriendRequestStatus.ACCEPTED)
         || friendshipRepository.existsByRequesterIdAndAddresseeIdAndStatus(user2, user1,
@@ -218,9 +237,12 @@ public class FriendshipService {
    * @param user2 The second user
    * @return The Friend relationship between the two users. Throws NFE otherwise.
    */
-  public Friendship findPair(ObjectId user1, ObjectId user2) {
+  public Friendship findFriendshipByUserPair(ObjectId user1, ObjectId user2) {
+    logger.info("findFriendshipByUserPair(user1={}, user2={})", user1, user2);
+    logger.info("friendshipRepository.findByRequesterIdAndAddresseeId(user1={}, user2={})", user1, user2);
     Optional<Friendship> sender1 =
         friendshipRepository.findByRequesterIdAndAddresseeId(user1, user2);
+    logger.info("friendshipRepository.findByRequesterIdAndAddresseeId(user2={}, user1={})", user2, user1);
     Optional<Friendship> sender2 =
         friendshipRepository.findByRequesterIdAndAddresseeId(user2, user1);
 
@@ -229,18 +251,12 @@ public class FriendshipService {
     } else if (sender2.isPresent()) {
       return sender2.get();
     } else {
-      Map<String, String> query =
-          Map.of("friendId1", user1.toString(), "friendId2", user2.toString());
-      throw new NotFoundException(query);
+      throw new NotFoundException("friendships",
+          Map.of("user1", user1.toString(), "user2", user2.toString()));
     }
   }
 
-  public Friendship update(Friendship updatedFriend) {
-    validateFriendship(updatedFriend);
-    return friendshipRepository.save(updatedFriend);
-  }
-
-  private List<User> getOtherUsers(ObjectId userId, List<Friendship> friendships) {
+  private List<User> getOtherUsersInFrienships(ObjectId userId, List<Friendship> friendships) {
     List<ObjectId> friendIds = friendships.stream().map(f -> {
       if (f.getAddresseeId().equals(userId)) {
         return f.getRequesterId();
@@ -260,9 +276,11 @@ public class FriendshipService {
    * @return The FriendList for the provided User
    */
   public FriendList getFriendList(ObjectId userId) {
+    logger.info("getFriendList(userId={})", userId);
+    logger.info("friendshipRepository.findByRequesterIdOrAddresseeId(userId={}, userId={})", userId, userId);
     List<Friendship> friendships =
         friendshipRepository.findByRequesterIdOrAddresseeId(userId, userId);
-    List<User> otherUsers = getOtherUsers(userId, friendships);
+    List<User> otherUsers = getOtherUsersInFrienships(userId, friendships);
     return FriendshipMapper.friendList(userId, otherUsers, friendships);
   }
 
@@ -274,7 +292,7 @@ public class FriendshipService {
    * @param newStatus The desired new status.
    * @return true if the change is valid; false otherwise.
    */
-  private boolean validChange(ObjectId userId, Friendship friendship,
+  private boolean isValidStatusChange(ObjectId userId, Friendship friendship,
       FriendRequestStatus newStatus) {
     FriendRequestStatus current = friendship.getStatus();
     if (current == FriendRequestStatus.BLOCKED) {
@@ -314,25 +332,31 @@ public class FriendshipService {
    */
   public Friendship changeStatus(ObjectId userId, ObjectId friendshipId,
       FriendRequestStatus status) {
+    logger.info("changeStatus(userId={}, friendshipId={}, status={})", userId, friendshipId, status);
+    logger.info("friendshipRepository.findByRequesterIdOrAddresseeIdAndId(userId={}, userId={}, friendshipId={})", userId, userId, friendshipId);
     Friendship friendship =
         friendshipRepository.findByRequesterIdOrAddresseeIdAndId(userId, userId, friendshipId)
-            .orElseThrow(() -> new NotFoundException(
+            .orElseThrow(() -> new NotFoundException("friendships",
                 Map.of("userId", userId.toString(), "friendshipId", friendshipId.toString())));
-    if (!validChange(userId, friendship, status)) {
+    if (!isValidStatusChange(userId, friendship, status)) {
       throw new BadRequestException("Invalid friendship status change.");
     }
 
     friendship.setStatus(status);
-    friendship.setUpdatedAt(Instant.now());
     validateFriendship(friendship);
+    logger.info("friendshipRepository.save(friendship={})", friendship);
     return friendshipRepository.save(friendship);
   }
 
   public void deleteById(ObjectId friendId) {
+    logger.info("deleteById(friendId={})", friendId);
+    logger.info("friendshipRepository.deleteById(friendId={})", friendId);
     friendshipRepository.deleteById(friendId);
   }
 
   public void deleteByUserIdAndId(ObjectId userId, ObjectId friendshipId) {
+    logger.info("deleteByUserIdAndId(userId={}, friendshipId={})", userId, friendshipId);
+    logger.info("friendshipRepository.deleteByRequesterIdOrAddresseeIdAndId(userId={}, userId={}, friendshipId={})", userId, userId, friendshipId);
     friendshipRepository.deleteByRequesterIdOrAddresseeIdAndId(userId, userId, friendshipId);
   }
 }

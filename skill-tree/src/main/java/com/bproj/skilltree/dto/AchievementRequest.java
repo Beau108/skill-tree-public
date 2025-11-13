@@ -1,34 +1,40 @@
 package com.bproj.skilltree.dto;
 
+import com.bproj.skilltree.util.RegexPatterns;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import java.time.Instant;
 import java.util.List;
 import org.bson.types.ObjectId;
 
 /**
- * Incoming essential Achievement information. Includes Id because this DTO is used for create/edit
- * requests.
+ * Incoming essential Achievement information.
  */
 public class AchievementRequest {
-  private ObjectId id;
   @NotNull
-  private ObjectId treeId;
-  @NotBlank
+  private String treeId;
+  @Pattern(regexp = RegexPatterns.ACHIEVEMENT_TITLE)
+  @NotNull
   private String title;
+  @Pattern(regexp = RegexPatterns.IMAGE_URL)
+  @Nullable
   private String backgroundUrl;
+  @Pattern(regexp = RegexPatterns.ACHIEVEMENT_DESCRIPTION)
+  @Nullable
   private String description;
-  private List<ObjectId> prerequisites;
+  @NotNull
+  private List<String> prerequisites;
   @NotNull
   private boolean complete;
+  @Nullable
   private Instant completedAt;
 
   /**
    * Explicit value constructor.
    *
-   * @param id The ID of the Achievement
    * @param treeId The ID of the Tree this Achievement belongs to
    * @param title The title of the Achievement
    * @param backgroundUrl The background URL for the Achievement
@@ -38,14 +44,13 @@ public class AchievementRequest {
    * @param completedAt Timestamp when the Achievement was completed
    */
   @JsonCreator
-  public AchievementRequest(@JsonProperty("id") ObjectId id,
-      @JsonProperty("treeId") ObjectId treeId, @JsonProperty("title") String title,
+  public AchievementRequest(
+      @JsonProperty("treeId") String treeId, @JsonProperty("title") String title,
       @JsonProperty("backgroundUrl") String backgroundUrl,
       @JsonProperty("description") String description,
-      @JsonProperty("prerequisites") List<ObjectId> prerequisites,
+      @JsonProperty("prerequisites") List<String> prerequisites,
       @JsonProperty("complete") boolean complete,
       @JsonProperty("completedAt") Instant completedAt) {
-    this.id = id;
     this.treeId = treeId;
     this.title = title;
     this.backgroundUrl = backgroundUrl;
@@ -55,19 +60,11 @@ public class AchievementRequest {
     this.completedAt = completedAt;
   }
 
-  public ObjectId getId() {
-    return id;
-  }
-
-  public void setId(ObjectId id) {
-    this.id = id;
-  }
-
-  public ObjectId getTreeId() {
+  public String getTreeId() {
     return treeId;
   }
 
-  public void setTreeId(ObjectId treeId) {
+  public void setTreeId(String treeId) {
     this.treeId = treeId;
   }
 
@@ -95,11 +92,11 @@ public class AchievementRequest {
     this.description = description;
   }
 
-  public List<ObjectId> getPrerequisites() {
+  public List<String> getPrerequisites() {
     return prerequisites;
   }
 
-  public void setPrerequisites(List<ObjectId> prerequisites) {
+  public void setPrerequisites(List<String> prerequisites) {
     this.prerequisites = prerequisites;
   }
 

@@ -39,7 +39,7 @@ public class TreeMapper {
     if (tree == null) {
       return null;
     }
-    return new TreeResponse(tree.getId(), tree.getName(), tree.getBackgroundUrl(),
+    return new TreeResponse(tree.getId().toString(), tree.getName(), tree.getBackgroundUrl(),
         tree.getDescription(), tree.getVisibility());
   }
 
@@ -49,7 +49,7 @@ public class TreeMapper {
    * @param tree The Tree the dto will be made from
    * @return The TreeSummary dto
    */
-  public static TreeSummary getTreeSummary(Tree tree) {
+  public static TreeSummary toTreeSummary(Tree tree) {
     if (tree == null) {
       return null;
     }
@@ -79,7 +79,7 @@ public class TreeMapper {
    * @param orientation The orientation
    * @return The created TreeLayout
    */
-  public static TreeLayout buildTreeLayout(List<Skill> skills, List<Achievement> achievements,
+  public static TreeLayout toTreeLayout(List<Skill> skills, List<Achievement> achievements,
       Orientation orientation) {
     // Index locations to avoid O(n^2) runtime
     Map<ObjectId, SkillLocation> skillLocationMap = orientation.getSkillLocations().stream()
@@ -145,7 +145,7 @@ public class TreeMapper {
    * @param orientation The Orientation of the Tree
    * @return The MeTreeLayout DTO
    */
-  public static MeTreeLayout buildMeLayout(List<Skill> skills, List<Achievement> achievements,
+  public static MeTreeLayout toMeTreeLayout(List<Skill> skills, List<Achievement> achievements,
       Orientation orientation) {
     // Create skillLayout mapping
     Map<ObjectId, SkillLocation> skillLocationMap = orientation.getSkillLocations().stream()
@@ -156,9 +156,9 @@ public class TreeMapper {
           if (skillLocation == null) {
             throw new IllegalStateException("Skill not listed in Orientation.");
           }
-          return new MeSkillLayout(s.getId(), s.getName(), skillLocation.getX(),
+          return new MeSkillLayout(s.getId().toString(), s.getName(), skillLocation.getX(),
               skillLocation.getY(), s.getBackgroundUrl(), s.getTimeSpentHours(),
-              s.getParentSkillId());
+              s.getParentSkillId() != null ? s.getParentSkillId().toString() : null);
         }));
 
     // Create achievementLayout mapping
@@ -171,9 +171,9 @@ public class TreeMapper {
           if (achievementLocation == null) {
             throw new IllegalStateException("Achievement not listed in Orientation.");
           }
-          return new MeAchievementLayout(a.getId(), a.getTitle(), achievementLocation.getX(),
+          return new MeAchievementLayout(a.getId().toString(), a.getTitle(), achievementLocation.getX(),
               achievementLocation.getY(), a.getBackgroundUrl(), a.isComplete(), a.getCompletedAt(),
-              a.getPrerequisites());
+              a.getPrerequisites().stream().map(ObjectId::toString).toList());
         }));
     return new MeTreeLayout(skillLayout, achievementLayout);
   }

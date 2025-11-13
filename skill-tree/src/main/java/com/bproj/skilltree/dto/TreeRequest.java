@@ -1,21 +1,26 @@
 package com.bproj.skilltree.dto;
 
 import com.bproj.skilltree.model.Visibility;
+import com.bproj.skilltree.util.RegexPatterns;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import org.bson.types.ObjectId;
 
 /**
- * Incoming essential Tree information. Only used to create/edit requests thus
- * making Id necessary.
+ * Incoming essential Tree information.
  */
 public class TreeRequest {
-  private ObjectId id;
-  @NotBlank
+  @Pattern(regexp = RegexPatterns.TREE_NAME)
+  @NotNull
   private String name;
+  @Pattern(regexp = RegexPatterns.IMAGE_URL)
+  @Nullable
   private String backgroundUrl;
+  @Pattern(regexp = RegexPatterns.TREE_DESCRIPTION)
+  @Nullable
   private String description;
   @NotNull
   private Visibility visibility;
@@ -23,7 +28,6 @@ public class TreeRequest {
   /**
    * Explicit value constructor.
    *
-   * @param id            The ID of the Tree
    * @param name          The name of the Tree
    * @param backgroundUrl The background URL for the Tree
    * @param description   The description of the Tree
@@ -31,24 +35,14 @@ public class TreeRequest {
    */
   @JsonCreator
   public TreeRequest(
-      @JsonProperty("id") ObjectId id,
       @JsonProperty("name") String name,
       @JsonProperty("backgroundUrl") String backgroundUrl,
       @JsonProperty("description") String description,
       @JsonProperty("visibility") Visibility visibility) {
-    this.id = id;
     this.name = name;
     this.backgroundUrl = backgroundUrl;
     this.description = description;
     this.visibility = visibility;
-  }
-
-  public ObjectId getId() {
-    return id;
-  }
-
-  public void setId(ObjectId id) {
-    this.id = id;
   }
 
   public String getName() {

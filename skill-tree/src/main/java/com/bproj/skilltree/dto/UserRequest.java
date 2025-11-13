@@ -1,13 +1,17 @@
 package com.bproj.skilltree.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import com.bproj.skilltree.util.RegexPatterns;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 /**
  * Incoming essential User information.
  */
 public class UserRequest {
-  @NotBlank
+  @Pattern(regexp = RegexPatterns.DISPLAY_NAME)
+  @NotNull
   private String displayName;
+  @Pattern(regexp = RegexPatterns.IMAGE_URL)
   private String profilePictureUrl;
 
   public UserRequest() {

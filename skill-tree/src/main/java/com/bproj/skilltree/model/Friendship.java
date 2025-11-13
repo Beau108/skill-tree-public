@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -15,19 +16,26 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * A friend request sent from one user to another.
  */
 @Document(collection = "friends")
+@ToString(onlyExplicitlyIncluded = true)
 public class Friendship {
   @Id
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId id;
   @NotBlank
+  @ToString.Include
   private ObjectId requesterId;
   @NotBlank
+  @ToString.Include
   private ObjectId addresseeId;
   @NotBlank
+  @ToString.Include
   private FriendRequestStatus status;
   @CreatedDate
+  @ToString.Include
   private Instant createdAt;
   @LastModifiedDate
+  @ToString.Include
   private Instant updatedAt;
 
   public Friendship() {}

@@ -1,12 +1,15 @@
 package com.bproj.skilltree.mapper;
 
 import com.bproj.skilltree.dto.FriendList;
+import com.bproj.skilltree.dto.FriendshipUserResponse;
 import com.bproj.skilltree.dto.LeaderboardEntry;
 import com.bproj.skilltree.dto.UserResponse;
 import com.bproj.skilltree.model.Achievement;
 import com.bproj.skilltree.model.Activity;
 import com.bproj.skilltree.model.Friendship;
 import com.bproj.skilltree.model.User;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -33,6 +36,11 @@ public class FriendshipMapper {
     }
     Map<ObjectId, User> userMap = users.stream().collect(Collectors.toMap(User::getId, u -> u));
     FriendList fl = new FriendList();
+    ArrayList<FriendshipUserResponse> inbox = new ArrayList<>();
+    ArrayList<FriendshipUserResponse> outbox = new ArrayList<>();
+    ArrayList<FriendshipUserResponse> friendedUsers = new ArrayList<>();
+    ArrayList<FriendshipUserResponse> blockedUsers = new ArrayList<>();
+
     for (Friendship f : friendRequests) {
       User friend = null;
       boolean incoming = false;
@@ -46,26 +54,31 @@ public class FriendshipMapper {
         throw new IllegalStateException("userId {" + userId.toString()
             + "} was not found in one of the provided Friend objects.");
       }
-      UserResponse ur = new UserResponse(friend.getDisplayName(), friend.getProfilePictureUrl());
+      FriendshipUserResponse ur = new FriendshipUserResponse(f.getId().toString(),
+          new UserResponse(friend.getDisplayName(), friend.getProfilePictureUrl()));
       switch (f.getStatus()) {
         case ACCEPTED:
-          fl.getFriends().add(ur);
+          friendedUsers.add(ur);
           break;
         case PENDING:
           if (incoming) {
-            fl.getIncoming().add(ur);
+            inbox.add(ur);
           } else {
-            fl.getOutgoing().add(ur);
+            outbox.add(ur);
           }
           break;
         case BLOCKED:
-          fl.getBlocked().add(ur);
+          blockedUsers.add(ur);
           break;
         default:
           throw new IllegalStateException(
               "Friend {" + f.getId() + "} doesn't have a proper status: " + f.getStatus());
       }
     }
+    fl.setFriends(friendedUsers);
+    fl.setBlocked(blockedUsers);
+    fl.setIncoming(inbox);
+    fl.setOutgoing(outbox);
     return fl;
   }
 

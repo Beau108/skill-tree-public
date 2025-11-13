@@ -19,6 +19,8 @@ public interface SkillRepository extends MongoRepository<Skill, ObjectId> {
   List<Skill> findByIdIn(List<ObjectId> ids);
 
   List<Skill> findByUserId(ObjectId userId);
+  
+  List<Skill> findByParentSkillId(ObjectId parentSkillId);
 
   List<Skill> findByUserIdAndParentSkillId(ObjectId userId, ObjectId parentSkillId);
 
@@ -39,4 +41,6 @@ public interface SkillRepository extends MongoRepository<Skill, ObjectId> {
   void deleteByUserIdAndId(ObjectId userId, ObjectId id);
   
   void deleteByUserId(ObjectId userId);
+  
+  void deleteByTreeId(ObjectId treeId);
 }

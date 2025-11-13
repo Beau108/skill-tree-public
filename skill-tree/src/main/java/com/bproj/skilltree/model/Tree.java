@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -14,22 +15,31 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * Represents a specific skill, 'owns' subskills, achievements, and an orientation.
  */
 @Document(collection = "trees")
+@ToString(onlyExplicitlyIncluded = true)
 public class Tree {
   @Id
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId id;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId userId;
   @NotBlank
+  @ToString.Include
   private String name;
+  @ToString.Include
   private String backgroundUrl;
+  @ToString.Include
   private String description;
   @NotBlank
+  @ToString.Include
   private Visibility visibility;
   @CreatedDate
+  @ToString.Include
   private Instant createdAt;
   @LastModifiedDate
+  @ToString.Include
   private Instant updatedAt;
   
   public Tree() {}
@@ -65,6 +75,16 @@ public class Tree {
     this.backgroundUrl = backgroundUrl;
     this.description = description;
     this.visibility = visibility;
+  }
+
+  public Tree(Tree other) {
+      this.id = other.id;
+      this.userId = other.userId;
+      this.name = other.name;
+      this.description = other.description;
+      this.visibility = other.visibility;
+      this.createdAt = other.createdAt;
+      this.updatedAt = other.updatedAt;
   }
 
   public ObjectId getId() {

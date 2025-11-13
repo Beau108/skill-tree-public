@@ -35,4 +35,8 @@ public interface TreeRepository extends MongoRepository<Tree, ObjectId> {
   Page<Tree> findByUserIdIsNull(Pageable pageable);
 
   Page<Tree> findByVisibility(Visibility visibility, Pageable pageable);
+  
+  void deleteByUserId(ObjectId userId);
+  
+  void deleteByUserIdAndId(ObjectId userId, ObjectId id);
 }

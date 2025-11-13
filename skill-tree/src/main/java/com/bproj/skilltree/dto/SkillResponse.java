@@ -9,12 +9,12 @@ import org.bson.types.ObjectId;
  * that owns the associated Skill.
  */
 public class SkillResponse {
-  private ObjectId id;
-  private ObjectId treeId;
+  private String id;
+  private String treeId;
   private String name;
   private String backgroundUrl;
   private double timeSpentHours;
-  private ObjectId parentSkillId;
+  private String parentSkillId;
 
   /**
    * Explicit value constructor.
@@ -28,12 +28,12 @@ public class SkillResponse {
    */
   @JsonCreator
   public SkillResponse(
-      @JsonProperty("id") ObjectId id,
-      @JsonProperty("treeId") ObjectId treeId,
+      @JsonProperty("id") String id,
+      @JsonProperty("treeId") String treeId,
       @JsonProperty("name") String name,
       @JsonProperty("backgroundUrl") String backgroundUrl,
       @JsonProperty("timeSpentHours") double timeSpentHours,
-      @JsonProperty("parentSkillId") ObjectId parentSkillId) {
+      @JsonProperty("parentSkillId") String parentSkillId) {
     this.id = id;
     this.treeId = treeId;
     this.name = name;
@@ -42,19 +42,19 @@ public class SkillResponse {
     this.parentSkillId = parentSkillId;
   }
 
-  public ObjectId getId() {
+  public String getId() {
     return id;
   }
 
-  public void setId(ObjectId id) {
+  public void setId(String id) {
     this.id = id;
   }
 
-  public ObjectId getTreeId() {
+  public String getTreeId() {
     return treeId;
   }
 
-  public void setTreeId(ObjectId treeId) {
+  public void setTreeId(String treeId) {
     this.treeId = treeId;
   }
 
@@ -82,11 +82,11 @@ public class SkillResponse {
     this.timeSpentHours = timeSpentHours;
   }
 
-  public ObjectId getParentSkillId() {
+  public String getParentSkillId() {
     return parentSkillId;
   }
 
-  public void setParentSkillId(ObjectId parentSkillId) {
+  public void setParentSkillId(String parentSkillId) {
     this.parentSkillId = parentSkillId;
   }
 }

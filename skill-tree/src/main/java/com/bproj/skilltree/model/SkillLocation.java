@@ -3,17 +3,22 @@ package com.bproj.skilltree.model;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotNull;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 
 /**
  * For Orientations, where a Skill resides in a Tree view.
  */
+@ToString(onlyExplicitlyIncluded = true)
 public class SkillLocation {
   @NotNull
+  @ToString.Include
   private ObjectId skillId;
   @NotNull
+  @ToString.Include
   private double x;
   @NotNull
+  @ToString.Include
   private double y;
 
   public SkillLocation() {

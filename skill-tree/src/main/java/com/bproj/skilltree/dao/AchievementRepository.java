@@ -43,4 +43,6 @@ public interface AchievementRepository extends MongoRepository<Achievement, Obje
   void deleteByUserId(ObjectId userId);
 
   void deleteByUserIdAndTreeId(ObjectId userId, ObjectId treeId);
+  
+  void deleteByTreeId(ObjectId treeId);
 }

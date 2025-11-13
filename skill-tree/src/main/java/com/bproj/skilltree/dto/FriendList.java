@@ -1,6 +1,5 @@
 package com.bproj.skilltree.dto;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -8,10 +7,10 @@ import java.util.List;
  * Friends are represented by UserResponses.
  */
 public class FriendList {
-  private List<UserResponse> incoming;
-  private List<UserResponse> outgoing;
-  private List<UserResponse> friends;
-  private List<UserResponse> blocked;
+  private List<FriendshipUserResponse> incoming;
+  private List<FriendshipUserResponse> outgoing;
+  private List<FriendshipUserResponse> friends;
+  private List<FriendshipUserResponse> blocked;
 
   /**
    * Explicit value constructor.
@@ -21,8 +20,8 @@ public class FriendList {
    * @param friends List of accepted friends
    * @param blocked List of blocked users
    */
-  public FriendList(List<UserResponse> incoming, List<UserResponse> outgoing,
-      List<UserResponse> friends, List<UserResponse> blocked) {
+  public FriendList(List<FriendshipUserResponse> incoming, List<FriendshipUserResponse> outgoing,
+      List<FriendshipUserResponse> friends, List<FriendshipUserResponse> blocked) {
     this.incoming = incoming;
     this.outgoing = outgoing;
     this.friends = friends;
@@ -30,44 +29,44 @@ public class FriendList {
   }
 
   /**
-   * Default constructor initializing empty lists.
+   * Empty constructor.
    */
   public FriendList() {
-    this.incoming = new ArrayList<UserResponse>();
-    this.outgoing = new ArrayList<UserResponse>();
-    this.friends = new ArrayList<UserResponse>();
-    this.blocked = new ArrayList<UserResponse>();
+    this.incoming = List.of();
+    this.outgoing = List.of();
+    this.friends = List.of();
+    this.blocked = List.of();
   }
 
-  public List<UserResponse> getIncoming() {
+  public List<FriendshipUserResponse> getIncoming() {
     return incoming;
   }
 
-  public void setIncoming(List<UserResponse> incoming) {
+  public void setIncoming(List<FriendshipUserResponse> incoming) {
     this.incoming = incoming;
   }
 
-  public List<UserResponse> getOutgoing() {
+  public List<FriendshipUserResponse> getOutgoing() {
     return outgoing;
   }
 
-  public void setOutgoing(List<UserResponse> outgoing) {
+  public void setOutgoing(List<FriendshipUserResponse> outgoing) {
     this.outgoing = outgoing;
   }
 
-  public List<UserResponse> getFriends() {
+  public List<FriendshipUserResponse> getFriends() {
     return friends;
   }
 
-  public void setFriends(List<UserResponse> friends) {
+  public void setFriends(List<FriendshipUserResponse> friends) {
     this.friends = friends;
   }
 
-  public List<UserResponse> getBlocked() {
+  public List<FriendshipUserResponse> getBlocked() {
     return blocked;
   }
 
-  public void setBlocked(List<UserResponse> blocked) {
+  public void setBlocked(List<FriendshipUserResponse> blocked) {
     this.blocked = blocked;
   }
 }

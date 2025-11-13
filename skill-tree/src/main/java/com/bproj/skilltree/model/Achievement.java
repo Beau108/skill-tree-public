@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -16,29 +17,41 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * An accomplishment associated with a Tree. Belongs to a User and a Tree.
  */
 @Document(collection = "achievements")
+@ToString(onlyExplicitlyIncluded = true)
 public class Achievement {
   @Id
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId id;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId userId;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId treeId;
   @NotBlank
+  @ToString.Include
   private String title;
+  @ToString.Include
   private String backgroundUrl;
+  @ToString.Include
   private String description;
   @JsonSerialize(contentUsing = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private List<ObjectId> prerequisites = new ArrayList<ObjectId>();
   @NotBlank
+  @ToString.Include
   private boolean complete;
+  @ToString.Include
   private Instant completedAt;
   @CreatedDate
+  @ToString.Include
   private Instant createdAt;
   @LastModifiedDate
+  @ToString.Include
   private Instant updatedAt;
 
   public Achievement() {}
@@ -71,20 +84,41 @@ public class Achievement {
    * Constructor from DTO.
    *
    * @param treeId          The Id of the Tree this Achievement belongs to
+   * @param title           The title of the Achievement
    * @param backgroundUrl   The URL for the background image of this Achievement
    * @param description     The description of what it means to complete this Achievement
    * @param prerequisites   The prerequisite Achievements for this Achievement
    * @param complete        Whether this Achievement has been completed or not
    * @param completedAt     When this Achievement was completed. Null if incomplete
    */
-  public Achievement(ObjectId treeId, String backgroundUrl, String description,
+  public Achievement(ObjectId treeId, String title, String backgroundUrl, String description,
       List<ObjectId> prerequisites, boolean complete, Instant completedAt) {
     this.treeId = treeId;
+    this.title = title;
     this.backgroundUrl = backgroundUrl;
     this.description = description;
     this.prerequisites = prerequisites;
     this.complete = complete;
     this.completedAt = completedAt;
+  }
+
+    /**
+     * Copy constructor.
+     *
+     * @param other The Achievement to be copied
+     */
+  public Achievement(Achievement other) {
+      this.id = other.id;
+      this.userId = other.userId;
+      this.treeId = other.treeId;
+      this.title = other.title;
+      this.backgroundUrl = other.backgroundUrl;
+      this.description = other.description;
+      this.prerequisites = new ArrayList<>(other.prerequisites);
+      this.complete = other.complete;
+      this.completedAt = other.completedAt;
+      this.createdAt = other.createdAt;
+      this.updatedAt = other.updatedAt;
   }
 
   public ObjectId getId() {

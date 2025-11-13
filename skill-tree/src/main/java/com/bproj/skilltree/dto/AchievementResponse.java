@@ -11,12 +11,12 @@ import org.bson.types.ObjectId;
  * this Achievement) can send back requests with this Achievement's Id for edit operations.
  */
 public class AchievementResponse {
-  private ObjectId id;
-  private ObjectId treeId;
+  private String id;
+  private String treeId;
   private String title;
   private String backgroundUrl;
   private String description;
-  private List<ObjectId> prerequisites;
+  private List<String> prerequisites;
   private boolean complete;
   private Instant completedAt;
 
@@ -33,12 +33,12 @@ public class AchievementResponse {
    */
   @JsonCreator
   public AchievementResponse(
-      @JsonProperty("id") ObjectId id,
-      @JsonProperty("treeId") ObjectId treeId,
+      @JsonProperty("id") String id,
+      @JsonProperty("treeId") String treeId,
       @JsonProperty("title") String title,
       @JsonProperty("backgroundUrl") String backgroundUrl,
       @JsonProperty("description") String description,
-      @JsonProperty("prerequisites") List<ObjectId> prerequisites,
+      @JsonProperty("prerequisites") List<String> prerequisites,
       @JsonProperty("complete") boolean complete,
       @JsonProperty("completedAt") Instant completedAt) {
     this.id = id;
@@ -51,19 +51,19 @@ public class AchievementResponse {
     this.completedAt = completedAt;
   }
 
-  public ObjectId getId() {
+  public String getId() {
     return id;
   }
 
-  public void setId(ObjectId id) {
+  public void setId(String id) {
     this.id = id;
   }
 
-  public ObjectId getTreeId() {
+  public String getTreeId() {
     return treeId;
   }
 
-  public void setTreeId(ObjectId treeId) {
+  public void setTreeId(String treeId) {
     this.treeId = treeId;
   }
 
@@ -91,11 +91,11 @@ public class AchievementResponse {
     this.description = description;
   }
 
-  public List<ObjectId> getPrerequisites() {
+  public List<String> getPrerequisites() {
     return prerequisites;
   }
 
-  public void setPrerequisites(List<ObjectId> prerequisites) {
+  public void setPrerequisites(List<String> prerequisites) {
     this.prerequisites = prerequisites;
   }
 

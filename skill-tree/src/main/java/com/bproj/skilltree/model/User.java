@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -14,21 +15,27 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * An end user. Ties their firebase account to Skill Tree.
  */
 @Document(collection = "users")
+@ToString(onlyExplicitlyIncluded = true)
 public class User {
 
   @Id
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId id;
   @NotBlank
   private String firebaseId;
   @NotBlank
+  @ToString.Include
   private String displayName;
   @NotBlank
   private String email;
+  @ToString.Include
   private String profilePictureUrl;
   @CreatedDate
+  @ToString.Include
   private Instant createdAt;
   @LastModifiedDate
+  @ToString.Include
   private Instant updatedAt;
 
   public User() {}
@@ -57,6 +64,16 @@ public class User {
   public User(String displayName, String profilePictureUrl) {
     this.displayName = displayName;
     this.profilePictureUrl = profilePictureUrl;
+  }
+
+  public User(User other) {
+      this.id = other.id;
+      this.firebaseId = other.firebaseId;
+      this.displayName = other.displayName;
+      this.email = other.email;
+      this.profilePictureUrl = other.profilePictureUrl;
+      this.createdAt = other.createdAt;
+      this.updatedAt = other.updatedAt;
   }
 
   public ObjectId getId() {

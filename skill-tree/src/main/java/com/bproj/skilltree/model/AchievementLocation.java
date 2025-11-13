@@ -3,17 +3,22 @@ package com.bproj.skilltree.model;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotNull;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 
 /**
  * For Orientations, represents the location of an Achievement in a Tree view.
  */
+@ToString(onlyExplicitlyIncluded = true)
 public class AchievementLocation {
   @NotNull
+  @ToString.Include
   private ObjectId achievementId;
   @NotNull
+  @ToString.Include
   private double x;
   @NotNull
+  @ToString.Include
   private double y;
 
   public AchievementLocation() {

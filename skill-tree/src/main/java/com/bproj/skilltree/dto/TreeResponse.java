@@ -9,7 +9,7 @@ import org.bson.types.ObjectId;
  * Outgoing essential Tree information. Only sent to the end user when the Tree belongs to them.
  */
 public class TreeResponse {
-  private ObjectId id;
+  private String id;
   private String name;
   private String backgroundUrl;
   private String description;
@@ -26,7 +26,7 @@ public class TreeResponse {
    */
   @JsonCreator
   public TreeResponse(
-      @JsonProperty("id") ObjectId id,
+      @JsonProperty("id") String id,
       @JsonProperty("name") String name,
       @JsonProperty("backgroundUrl") String backgroundUrl,
       @JsonProperty("description") String description,
@@ -38,11 +38,11 @@ public class TreeResponse {
     this.visibility = visibility;
   }
 
-  public ObjectId getId() {
+  public String getId() {
     return id;
   }
 
-  public void setId(ObjectId id) {
+  public void setId(String id) {
     this.id = id;
   }
 

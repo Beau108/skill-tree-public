@@ -5,7 +5,7 @@ import java.util.Map;
 
 /**
  * Shows the number of days in a row a User has logged an Activity and the number of Activities
- * logged per the last TODO days.
+ * logged per the last x days.
  */
 
 public class RecentActivity {

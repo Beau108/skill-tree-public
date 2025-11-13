@@ -3,11 +3,12 @@ package com.bproj.skilltree.api;
 import com.bproj.skilltree.dto.FriendList;
 import com.bproj.skilltree.model.FriendRequestStatus;
 import com.bproj.skilltree.service.FriendshipService;
-import com.bproj.skilltree.service.UserService;
 import com.bproj.skilltree.util.AuthUtils;
 import com.bproj.skilltree.util.ObjectIdUtils;
 import java.net.URI;
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,16 +26,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/friendships/me")
 public class MeFriendshipController {
+  private static final Logger logger = LoggerFactory.getLogger(MeFriendshipController.class);
   private final FriendshipService friendshipService;
   private final AuthUtils authUtils;
 
-  public MeFriendshipController(FriendshipService friendService, UserService userService) {
+  public MeFriendshipController(FriendshipService friendService, AuthUtils authUtils) {
     this.friendshipService = friendService;
-    this.authUtils = new AuthUtils(userService);
+    this.authUtils = authUtils;
   }
 
   @GetMapping
   public ResponseEntity<FriendList> myFriends(Authentication auth) {
+    logger.info("GET /api/friendships/me - myFriends()");
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     return ResponseEntity.ok(friendshipService.getFriendList(userId));
   }
@@ -49,6 +52,8 @@ public class MeFriendshipController {
   @PostMapping("/{displayName}")
   public ResponseEntity<String> sendFriendRequest(Authentication auth,
       @PathVariable String displayName) {
+    logger.info("POST /api/friendships/me/{} - sendFriendRequest(displayName={})", displayName,
+        displayName);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     friendshipService.addFriend(userId, displayName);
     return ResponseEntity.created(URI.create("/api/friendships/me/" + displayName))
@@ -66,6 +71,8 @@ public class MeFriendshipController {
   @PatchMapping("/{friendshipId}")
   public ResponseEntity<FriendRequestStatus> changeStatus(Authentication auth,
       @PathVariable String friendshipId, @RequestParam FriendRequestStatus status) {
+    logger.info("PATCH /api/friendships/me/{} - changeStatus(friendshipId={}, status={})",
+        friendshipId, friendshipId, status);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId friendshipObjectId = ObjectIdUtils.validateObjectId(friendshipId, "friendshipId");
     friendshipService.changeStatus(userId, friendshipObjectId, status);
@@ -81,6 +88,8 @@ public class MeFriendshipController {
    */
   @DeleteMapping("/{friendshipId}")
   public ResponseEntity<Void> removeFriend(Authentication auth, @PathVariable String friendshipId) {
+    logger.info("DELETE /api/friendships/me/{} - removeFriend(friendshipId={})", friendshipId,
+        friendshipId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId friendshipObjectId = ObjectIdUtils.validateObjectId(friendshipId, "friendshipId");
     friendshipService.deleteByUserIdAndId(userId, friendshipObjectId);

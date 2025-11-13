@@ -37,7 +37,10 @@ public class ActivityMapper {
         activityRequest.getDuration(), activityRequest.getSkillWeights());
   }
 
-  private static List<WeightedSkill> toWeightedSkills(Activity activity, List<Skill> skills) {
+  private static List<WeightedSkill> mapToWeightedSkills(Activity activity, List<Skill> skills) {
+    if (skills == null || skills.size() == 0) {
+      return List.of();
+    }
     Map<ObjectId, Skill> skillMap =
         skills.stream().collect(Collectors.toMap(Skill::getId, skill -> skill));
     List<SkillWeight> skillWeights = activity.getSkillWeights();
@@ -61,8 +64,8 @@ public class ActivityMapper {
     if (activity == null) {
       return null;
     }
-    List<WeightedSkill> weightedSkills = toWeightedSkills(activity, skills);
-    return new ActivityResponse(activity.getId(), activity.getName(), activity.getDescription(),
+    List<WeightedSkill> weightedSkills = mapToWeightedSkills(activity, skills);
+    return new ActivityResponse(activity.getId().toString(), activity.getName(), activity.getDescription(),
         activity.getDuration(), weightedSkills);
   }
 
@@ -76,7 +79,7 @@ public class ActivityMapper {
     if (activity == null) {
       return null;
     }
-    List<WeightedSkill> weightedSkills = toWeightedSkills(activity, skills);
+    List<WeightedSkill> weightedSkills = mapToWeightedSkills(activity, skills);
     return new ActivitySummary(activity.getName(), activity.getDuration(), weightedSkills);
   }
 
@@ -93,7 +96,7 @@ public class ActivityMapper {
     if (activity == null || user == null) {
       return null;
     }
-    List<WeightedSkill> weightedSkills = toWeightedSkills(activity, skills);
+    List<WeightedSkill> weightedSkills = mapToWeightedSkills(activity, skills);
     return new ActivityFeedItem(activity.getCreatedAt(), user.getDisplayName(),
         user.getProfilePictureUrl(), activity.getName(), activity.getDuration(),
         activity.getDescription(), weightedSkills);

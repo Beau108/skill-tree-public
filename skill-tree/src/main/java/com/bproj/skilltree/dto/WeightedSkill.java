@@ -1,23 +1,12 @@
 package com.bproj.skilltree.dto;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-
 /**
  * DTO version of an Activity's "SkillWeight" that contains a weight and minimal
- * skill info rather
- * than an Id and a weight.
+ * skill info rather than an Id and a weight.
  */
 public class WeightedSkill {
-  @NotNull
-  @Min(0)
-  @Max(1)
   private double weight;
-  @NotBlank
   private String skillName;
-  @NotBlank
   private String backgroundUrl;
 
   public WeightedSkill() {

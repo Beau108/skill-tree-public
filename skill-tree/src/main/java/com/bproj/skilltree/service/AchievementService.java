@@ -1,45 +1,39 @@
 package com.bproj.skilltree.service;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import org.bson.types.ObjectId;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Service;
 import com.bproj.skilltree.dao.AchievementRepository;
+import com.bproj.skilltree.dao.OrientationRepository;
 import com.bproj.skilltree.dao.TreeRepository;
 import com.bproj.skilltree.dao.UserRepository;
 import com.bproj.skilltree.dto.AchievementFeedItem;
-import com.bproj.skilltree.dto.AchievementResponse;
 import com.bproj.skilltree.exception.BadRequestException;
 import com.bproj.skilltree.exception.NotFoundException;
-import com.bproj.skilltree.mapper.AchievementMapper;
-import com.bproj.skilltree.model.Achievement;
-import com.bproj.skilltree.model.AchievementSortMode;
-import com.bproj.skilltree.model.Tree;
-import com.bproj.skilltree.model.User;
-import com.bproj.skilltree.util.JsonMergePatchUtils;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
+import com.bproj.skilltree.model.*;
+import com.bproj.skilltree.util.PatchUtils;
+import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Implements for business logic for the 'achievements' collection.
  */
 @Service
 public class AchievementService {
+  private static final Logger logger = LoggerFactory.getLogger(AchievementService.class);
   private final AchievementRepository achievementRepository;
   private final UserRepository userRepository;
   private final TreeRepository treeRepository;
-  private static final String TITLE_REGEX = "^[\\p{L}\\p{N}\\p{P}\\p{Zs}]{1,50}$";
-  private static final String DESCRIPTION_REGEX = "^[\\p{L}\\p{N}\\p{P}\\p{Zs}]{1,500}$";
-  private static final String URL_REGEX = "^(https?://)?([a-zA-Z0-9.-]+\\.)?skilltree\\.com(/.*)?$";
+  private final OrientationRepository orientationRepository;
+
 
   /**
    * Create an AchievementService. user and tree repositories required for validation & query
@@ -53,10 +47,12 @@ public class AchievementService {
   public AchievementService(
       @Qualifier("mongoAchievementRepository") AchievementRepository achievementRepository,
       @Qualifier("mongoUserRepository") UserRepository userRepository,
-      @Qualifier("mongoTreeRepository") TreeRepository treeRepository) {
+      @Qualifier("mongoTreeRepository") TreeRepository treeRepository,
+      @Qualifier("mongoOrientationRepository") OrientationRepository orientationRepository) {
     this.achievementRepository = achievementRepository;
     this.userRepository = userRepository;
     this.treeRepository = treeRepository;
+    this.orientationRepository = orientationRepository;
   }
 
   /**
@@ -71,42 +67,18 @@ public class AchievementService {
     // userId
     ObjectId userId = achievement.getUserId();
     if (!userRepository.existsById(userId)) {
-      throw new BadRequestException("userId must reference an existing user.");
+      throw new BadRequestException("Achievement must reference an existing user.");
     }
 
     // treeId
     ObjectId treeId = achievement.getTreeId();
     Optional<Tree> optionalTree = treeRepository.findById(treeId);
     if (optionalTree.isEmpty()) {
-      throw new BadRequestException("treeId must reference an existing tree.");
+      throw new BadRequestException("Achievement must reference an existing tree.");
     }
     Tree tree = optionalTree.get();
     if (!tree.getUserId().equals(userId)) {
-      throw new BadRequestException(
-          "An Achievement's tree must be owned by the same user as the Achievement.");
-    }
-
-    // title
-    Pattern ptTitle = Pattern.compile(TITLE_REGEX);
-    Matcher mtTitle = ptTitle.matcher(achievement.getTitle());
-    if (!mtTitle.matches()) {
-      throw new BadRequestException("Title must be 1-50 characters.");
-    }
-
-    // description
-    if (achievement.getDescription() != null) {
-      Pattern ptDesc = Pattern.compile(DESCRIPTION_REGEX);
-      Matcher mtDesc = ptDesc.matcher(achievement.getDescription());
-      if (!mtDesc.matches()) {
-        throw new BadRequestException("Description must be less than 500 characters.");
-      }
-    }
-
-    // URL
-    Pattern ptUrl = Pattern.compile(URL_REGEX);
-    Matcher mtUrl = ptUrl.matcher(achievement.getBackgroundUrl());
-    if (!mtUrl.matches()) {
-      throw new BadRequestException("URL must belong to skilltree");
+      throw new BadRequestException("Achievement tree must be owned by the same user.");
     }
 
     // Prerequisites
@@ -114,36 +86,80 @@ public class AchievementService {
       Optional<Achievement> optionalPrerequisite =
           achievementRepository.findByUserIdAndTreeIdAndId(userId, treeId, prereqId);
       if (optionalPrerequisite.isEmpty()) {
-        throw new BadRequestException(
-            "Prerequisite could not be found with matching userId and treeId.");
+        throw new BadRequestException("Prerequisite must have matching userId and treeId.");
       }
     }
 
     // completedAt
     if (!achievement.isComplete() && achievement.getCompletedAt() != null) {
-      throw new BadRequestException("Incomplete achievements must have completedAt set to null.");
+      throw new BadRequestException("Incomplete achievements cannot have completedAt set.");
     }
   }
 
-  public Achievement create(Achievement achievement) {
-    validateAchievement(achievement);
-    return achievementRepository.insert(achievement);
+  private boolean wouldCreateCycle(Achievement achievement, List<ObjectId> newPrerequisites) {
+    Map<ObjectId, Achievement> achievementMap =
+        achievementRepository.findByTreeId(achievement.getTreeId()).stream()
+            .collect(Collectors.toMap(Achievement::getId, a -> a));
+
+    ObjectId targetId = achievement.getId();
+    Deque<ObjectId> stack = new ArrayDeque<>(newPrerequisites);
+    while (!stack.isEmpty()) {
+      ObjectId currentId = stack.pop();
+      if (currentId == null) {
+        continue;
+      }
+      if (currentId.equals(targetId)) {
+        return true;
+      }
+
+      Achievement currentAch = achievementMap.get(currentId);
+      if (currentAch == null) {
+        continue;
+      }
+      for (ObjectId prereqId : currentAch.getPrerequisites()) {
+        stack.push(prereqId);
+      }
+    }
+    return false;
   }
 
-  public AchievementResponse createResponse(Achievement achievement) {
-    return AchievementMapper.fromAchievement(create(achievement));
-  }
 
-  public AchievementResponse createResponse(ObjectId userId, Achievement achievement) {
+  /**
+   * Create a new Achievement.
+   *
+   * @param achievement The Achievement to be created
+   * @param userId The Id of the User the Achievement belongs to
+   * @return The created Achievement
+   */
+  @Transactional
+  public Achievement create(Achievement achievement, ObjectId userId) {
+    logger.info("create(achievement={}, userId={})", achievement, userId);
     achievement.setUserId(userId);
-    return createResponse(achievement);
+    validateAchievement(achievement);
+    logger.info("achievementRepository.insert(achievement={})", achievement);
+    Achievement createdAchievement = achievementRepository.insert(achievement);
+    logger.info("orientationRepository.findByUserIdAndTreeId(userId={}, treeId={})", userId,
+        achievement.getTreeId());
+    Orientation orientation =
+        orientationRepository.findByUserIdAndTreeId(userId, achievement.getTreeId())
+            .orElseThrow(() -> new NotFoundException("orientations",
+                Map.of("userId", userId.toString(), "treeId", achievement.getTreeId().toString())));
+    orientation.getAchievementLocations()
+        .add(new AchievementLocation(createdAchievement.getId(), 0, 0));
+    logger.info("orientationRepository.save(orientation={})", orientation);
+    orientationRepository.save(orientation);
+    return createdAchievement;
   }
 
   public boolean existsById(ObjectId achievementId) {
+    logger.info("existsById(achievementId={})", achievementId);
+    logger.info("achievementRepository.existsById(achievementId={})", achievementId);
     return achievementRepository.existsById(achievementId);
   }
 
   public boolean existsByUserIdAndId(ObjectId userId, ObjectId id) {
+    logger.info("existsByUserIdAndId(userId={}, id={})", userId, id);
+    logger.info("achievementRepository.existsByUserIdAndId(userId={}, id={})", userId, id);
     return achievementRepository.existsByUserIdAndId(userId, id);
   }
 
@@ -153,13 +169,12 @@ public class AchievementService {
    * @param achievementId The Id of the desired Achievement
    * @return The Achievement associated with the Id. Otherwise throws.
    */
-  public Achievement getEntityById(ObjectId achievementId) {
-    return achievementRepository.findById(achievementId).orElseThrow(
-        () -> new NotFoundException(Map.of("achievementId", achievementId.toString())));
-  }
-
-  public AchievementResponse getResponseById(ObjectId achievementId) {
-    return AchievementMapper.fromAchievement(getEntityById(achievementId));
+  public Achievement findById(ObjectId achievementId) {
+    logger.info("findById(achievementId={})", achievementId);
+    logger.info("achievementRepository.findById(achievementId={})", achievementId);
+    return achievementRepository.findById(achievementId)
+        .orElseThrow(() -> new NotFoundException("achievements",
+            Map.of("achievementId", achievementId.toString())));
   }
 
   /**
@@ -169,22 +184,19 @@ public class AchievementService {
    * @param achievementId The Id of the Achievement
    * @return The Achievement associated with userId and Id. Throws otherwise.
    */
-  public Achievement getEntityByUserIdAndId(ObjectId userId, ObjectId achievementId) {
+  public Achievement findByUserIdAndId(ObjectId userId, ObjectId achievementId) {
+    logger.info("findByUserIdAndId(userId={}, achievementId={})", userId, achievementId);
+    logger.info("achievementRepository.findByUserIdAndId(userId={}, achievementId={})", userId,
+        achievementId);
     return achievementRepository.findByUserIdAndId(userId, achievementId)
-        .orElseThrow(() -> new NotFoundException(
+        .orElseThrow(() -> new NotFoundException("achievements",
             Map.of("userId", userId.toString(), "achievementId", achievementId.toString())));
   }
 
-  public AchievementResponse getResponseByUserIdAndId(ObjectId userId, ObjectId achievementId) {
-    return AchievementMapper.fromAchievement(getEntityByUserIdAndId(userId, achievementId));
-  }
-
-  public List<Achievement> getAllEntities() {
+  public List<Achievement> findAll() {
+    logger.info("findAll()");
+    logger.info("achievementRepository.findAll()");
     return achievementRepository.findAll();
-  }
-
-  public List<Achievement> getEntityByUserId(ObjectId userId) {
-    return achievementRepository.findByUserId(userId);
   }
 
   /**
@@ -196,44 +208,22 @@ public class AchievementService {
    * @param next (optional) The returned achievements are incomplete with completed prerequisites.
    * @return A list of Achievements belonging to the provided userId, satisfying the query.
    */
-  public List<Achievement> getEntityByUserId(ObjectId userId, ObjectId treeId, Boolean next) {
+  public List<Achievement> findByUserId(ObjectId userId, ObjectId treeId, Boolean next) {
+    logger.info("findByUserId(userId={}, treeId={}, next={})", userId, treeId, next);
     if (treeId != null) {
       if (Boolean.TRUE.equals(next)) {
         return findByUserIdAndNext(userId, treeId);
       } else {
+        logger.info("achievementRepository.findByUserIdAndTreeId(userId={}, treeId={})", userId,
+            treeId);
         return achievementRepository.findByUserIdAndTreeId(userId, treeId);
       }
     }
     if (Boolean.TRUE.equals(next)) {
       return findByUserIdAndNext(userId, null);
     }
+    logger.info("achievementRepository.findByUserId(userId={})", userId);
     return achievementRepository.findByUserId(userId);
-  }
-
-  public List<AchievementResponse> getResponseByUserId(ObjectId userId) {
-    return getEntityByUserId(userId).stream().map(AchievementMapper::fromAchievement).toList();
-  }
-
-  public List<AchievementResponse> getResponseByUserId(ObjectId userId, ObjectId treeId,
-      Boolean next) {
-    return getEntityByUserId(userId, treeId, next).stream().map(AchievementMapper::fromAchievement)
-        .toList();
-  }
-
-  /**
-   * Find all achievements that have the provided one in their immediate prerequisites.
-   *
-   * @param userId The User the returned Achievements belong to
-   * @param achievementId The Achievement we are finding children for
-   * @return The children list for the provided Achievement. Throws otherwise.
-   */
-  public List<Achievement> findChildren(ObjectId userId, ObjectId achievementId) {
-    if (!achievementRepository.existsByUserIdAndId(userId, achievementId)) {
-      Map<String, String> query =
-          Map.of("userId", userId.toString(), "achievementId", achievementId.toString());
-      throw new NotFoundException(query);
-    }
-    return achievementRepository.findByUserIdAndPrerequisitesContaining(userId, achievementId);
   }
 
   /**
@@ -246,9 +236,11 @@ public class AchievementService {
    * @param sortMode How the resulting list will be sorted
    * @return The filtered and sorted list of Achievements
    */
-  public List<Achievement> queryEntities(ObjectId userId, ObjectId treeId, Boolean next,
+  public List<Achievement> query(ObjectId userId, ObjectId treeId, Boolean next,
       AchievementSortMode sortMode) {
-    List<Achievement> achievements = getEntityByUserId(userId, treeId, next);
+    logger.info("query(userId={}, treeId={}, next={}, sortMode={})", userId, treeId, next,
+        sortMode);
+    List<Achievement> achievements = findByUserId(userId, treeId, next);
     switch (sortMode) {
       case TITLE:
         return achievements.stream().sorted(Comparator.comparing(Achievement::getTitle)).toList();
@@ -262,15 +254,29 @@ public class AchievementService {
         return achievements.stream()
             .sorted(Comparator.comparing(Achievement::getCreatedAt).reversed()).toList();
       default:
-        throw new BadRequestException(
-            "AchievementSortMode " + sortMode.toString() + " not recognized.");
+        throw new BadRequestException("Invalid AchievementSortMode.");
     }
   }
 
-  public List<AchievementResponse> queryResponses(ObjectId userId, ObjectId treeId, Boolean next,
-      AchievementSortMode sortMode) {
-    return queryEntities(userId, treeId, next, sortMode).stream()
-        .map(AchievementMapper::fromAchievement).toList();
+  /**
+   * Find all achievements that have the provided one in their immediate prerequisites.
+   *
+   * @param userId The User the returned Achievements belong to
+   * @param achievementId The Achievement we are finding children for
+   * @return The children list for the provided Achievement. Throws otherwise.
+   */
+  public List<Achievement> findChildren(ObjectId userId, ObjectId achievementId) {
+    logger.info("findChildren(userId={}, achievementId={})", userId, achievementId);
+    logger.info("achievementRepository.existsByUserIdAndId(userId={}, achievementId={})", userId,
+        achievementId);
+    if (!achievementRepository.existsByUserIdAndId(userId, achievementId)) {
+      throw new NotFoundException("achievements",
+          Map.of("userId", userId.toString(), "achievementId", achievementId.toString()));
+    }
+    logger.info(
+        "achievementRepository.findByUserIdAndPrerequisitesContaining(userId={}, achievementId={})",
+        userId, achievementId);
+    return achievementRepository.findByUserIdAndPrerequisitesContaining(userId, achievementId);
   }
 
   /**
@@ -282,8 +288,16 @@ public class AchievementService {
    * @return The Achievements matching the userId and possible the treeId.
    */
   public List<Achievement> findByUserIdAndNext(ObjectId userId, ObjectId treeId) {
+    logger.info("findByUserIdAndNext(userId={}, treeId={})", userId, treeId);
     if (treeId != null && !treeRepository.existsByUserIdAndId(userId, treeId)) {
-      throw new NotFoundException(Map.of("userId", userId.toString(), "treeId", treeId.toString()));
+      throw new NotFoundException("trees",
+          Map.of("userId", userId.toString(), "treeId", treeId.toString()));
+    }
+    if (treeId == null) {
+      logger.info("achievementRepository.findByUserId(userId={})", userId);
+    } else {
+      logger.info("achievementRepository.findByUserIdAndTreeId(userId={}, treeId={})", userId,
+          treeId);
     }
     List<Achievement> all = treeId == null ? achievementRepository.findByUserId(userId)
         : achievementRepository.findByUserIdAndTreeId(userId, treeId);
@@ -305,7 +319,9 @@ public class AchievementService {
    * @param days The number of days in the past to look for Achievements
    * @return The List of AchievementFeedItems
    */
-  public List<AchievementFeedItem> getFeedItems(List<ObjectId> userIds, int days) {
+  public List<AchievementFeedItem> getAchievementFeedItemsByUserIds(List<ObjectId> userIds,
+      int days) {
+    logger.info("getAchievementFeedItemsByUserIds(userIds={}, days={})", userIds, days);
     if (userIds.isEmpty()) {
       return List.of();
     }
@@ -314,8 +330,12 @@ public class AchievementService {
     Instant endInstant =
         LocalDate.now(ZoneOffset.UTC).plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
+    logger.info(
+        "achievementRepository.findByUserIdInAndCompletedAtBetween(userIds={}, startInstant={}, endInstant={})",
+        userIds, startInstant, endInstant);
     List<Achievement> achievements = achievementRepository
         .findByUserIdInAndCompletedAtBetween(userIds, startInstant, endInstant);
+    logger.info("userRepository.findByIdIn(userIds={})", userIds);
     Map<ObjectId, User> userMap =
         userRepository.findByIdIn(userIds).stream().collect(Collectors.toMap(User::getId, u -> u));
 
@@ -328,23 +348,54 @@ public class AchievementService {
 
 
   public List<Achievement> findCompletedByUserId(ObjectId userId) {
+    logger.info("findCompletedByUserId(userId={})", userId);
+    logger.info("achievementRepository.findByUserIdAndComplete(userId={}, complete=true)", userId);
     return achievementRepository.findByUserIdAndComplete(userId, true);
   }
 
   public List<Achievement> findIncompleteByUserId(ObjectId userId) {
+    logger.info("findIncompleteByUserId(userId={})", userId);
+    logger.info("achievementRepository.findByUserIdAndComplete(userId={}, complete=false)", userId);
     return achievementRepository.findByUserIdAndComplete(userId, false);
   }
 
   public List<Achievement> findByTitle(String title) {
+    logger.info("findByTitle(title={})", title);
+    logger.info("achievementRepository.findByTitle(title={})", title);
     return achievementRepository.findByTitle(title);
   }
 
   public List<Achievement> findByUserIdAndTitle(ObjectId userId, String title) {
+    logger.info("findByUserIdAndTitle(userId={}, title={})", userId, title);
+    logger.info("achievementRepository.findByUserIdAndTitle(userId={}, title={})", userId, title);
     return achievementRepository.findByUserIdAndTitle(userId, title);
   }
 
-  public Achievement update(Achievement updatedAchievement) {
-    return achievementRepository.save(updatedAchievement);
+  // O(n^2)
+  private int cascadeIncompleteStatus(ObjectId achievementId) {
+    Achievement root = achievementRepository.findById(achievementId)
+        .orElseThrow(() -> new NotFoundException("achievements",
+            Map.of("achievementId", achievementId.toString())));
+    int achievementsTouched = 0;
+    Deque<Achievement> stack = new ArrayDeque<>();
+    stack.push(root);
+    Map<ObjectId, Achievement> achievementMap = achievementRepository.findByTreeId(root.getTreeId())
+        .stream().collect(Collectors.toMap(a -> a.getId(), a -> a));
+    List<Achievement> modified = new ArrayList<>();
+    while (!stack.isEmpty()) {
+      Achievement current = stack.pop();
+      modified.add(current);
+      achievementsTouched++;
+      List<Achievement> currentChildren = achievementMap.values().stream()
+          .filter(a -> a.getPrerequisites().contains(current.getId())).toList();
+      for (Achievement a : currentChildren) {
+        stack.push(a);
+      }
+      current.setComplete(false);
+      current.setCompletedAt(null);
+    }
+    achievementRepository.saveAll(modified);
+    return achievementsTouched;
   }
 
   /**
@@ -355,29 +406,42 @@ public class AchievementService {
    * @param updatedAchievement The updated version of the Achievement
    * @return The updated Achievement
    */
+  @Transactional
   public Achievement update(ObjectId userId, ObjectId achievementId,
       Achievement updatedAchievement) {
-    if (!achievementRepository.existsByUserIdAndId(userId, achievementId)) {
-      throw new NotFoundException(
-          Map.of("userId", userId.toString(), "achievementId", achievementId.toString()));
-    }
+    logger.info("update(userId={}, achievementId={}, updatedAchievement={})", userId, achievementId,
+        updatedAchievement);
+    logger.info("achievementRepository.findByUserIdAndId(userId={}, achievementId={})", userId,
+        achievementId);
+    Achievement existingAchievement = achievementRepository.findByUserIdAndId(userId, achievementId)
+        .orElseThrow(() -> new NotFoundException("achievements",
+            Map.of("userId", userId.toString(), "achievementId", achievementId.toString())));
     updatedAchievement.setId(achievementId);
+    updatedAchievement.setUserId(userId);
+    updatedAchievement.setTreeId(existingAchievement.getTreeId());
     validateAchievement(updatedAchievement);
+    if (wouldCreateCycle(updatedAchievement, updatedAchievement.getPrerequisites())) {
+      throw new BadRequestException("Making this change would create a circular Tree.");
+    }
+    // if an incomplete prerequisite is added, set complete=false and completedAt=null for this and
+    // children
+    updatedAchievement.getPrerequisites().forEach(objId -> {
+      if (!existingAchievement.getPrerequisites().contains(objId)) {
+        Achievement newPrerequisite = achievementRepository.findById(objId).orElseThrow(
+            () -> new NotFoundException("achievements", Map.of("achievementId", objId.toString())));
+        if (!newPrerequisite.isComplete()) {
+          cascadeIncompleteStatus(updatedAchievement.getId());
+        }
+      }
+    });
+    // if this achievement has been changed complete -> incomplete, change all children to
+    // incomplete and set completedAt=null.
+    if (existingAchievement.isComplete() && !updatedAchievement.isComplete()) {
+      cascadeIncompleteStatus(updatedAchievement.getId());
+    }
+    logger.info("achievementRepository.save(updatedAchievement={})", updatedAchievement);
     achievementRepository.save(updatedAchievement);
     return updatedAchievement;
-  }
-
-  /**
-   * Update an Achievement and return the AchievementResponse. Requires userId and Id.
-   *
-   * @param userId The Id of the User the Achievement belongs to
-   * @param achievementId The Id of the Achievement
-   * @param updatedAchievement The updated version of the Achievement
-   * @return The AchievementResponse DTO
-   */
-  public AchievementResponse updateResponse(ObjectId userId, ObjectId achievementId,
-      Achievement updatedAchievement) {
-    return AchievementMapper.fromAchievement(update(userId, achievementId, updatedAchievement));
   }
 
   /**
@@ -388,45 +452,95 @@ public class AchievementService {
    * @param updates Map of updates to be applied to the Achievement
    * @return The updated Achievement
    */
-  public Achievement patch(ObjectId userId, ObjectId achievementId, JsonMergePatch updates) {
-    Optional<Achievement> optionalAchievement =
-        achievementRepository.findByUserIdAndId(userId, achievementId);
-    if (optionalAchievement.isEmpty()) {
-      Map<String, String> query =
-          Map.of("userId", userId.toString(), "achievementId", achievementId.toString());
-      throw new NotFoundException(query);
+  @Transactional
+  public Achievement patch(ObjectId userId, ObjectId achievementId, Map<String, Object> updates) {
+    logger.info("patch(userId={}, achievementId={}, updates={})", userId, achievementId, updates);
+    Achievement existingAchievement = findByUserIdAndId(userId, achievementId);
+    Achievement updatedAchievement = PatchUtils.applyAchievementPatch(existingAchievement, updates);
+    updatedAchievement.setId(achievementId);
+    updatedAchievement.setUserId(userId);
+    updatedAchievement.setTreeId(existingAchievement.getTreeId());
+    validateAchievement(updatedAchievement);
+    if (wouldCreateCycle(updatedAchievement, updatedAchievement.getPrerequisites())) {
+      throw new BadRequestException("Making this change would create a circular Tree.");
     }
-
-    Achievement achievement = optionalAchievement.get();
-    Achievement updated =
-        JsonMergePatchUtils.applyMergePatch(updates, achievement, Achievement.class);
-    updated.setId(achievementId);
-    validateAchievement(updated);
-    return achievementRepository.save(updated);
+    // if an incomplete prerequisite is added, set complete=false and completedAt=null for this and
+    // children.
+    updatedAchievement.getPrerequisites().forEach(objId -> {
+      if (!existingAchievement.getPrerequisites().contains(objId)) {
+        Achievement newPrerequisite = achievementRepository.findById(objId).orElseThrow(
+            () -> new NotFoundException("achievements", Map.of("achievementId", objId.toString())));
+        if (!newPrerequisite.isComplete()) {
+          cascadeIncompleteStatus(updatedAchievement.getId());
+        }
+      }
+    });
+    // if this achievement has been changed complete -> incomplete, change all children to
+    // incomplete and set completedAt=null.
+    if (existingAchievement.isComplete() && !updatedAchievement.isComplete()) {
+      cascadeIncompleteStatus(updatedAchievement.getId());
+    }
+    logger.info("achievementRepository.save(updatedAchievement={})", updatedAchievement);
+    return achievementRepository.save(updatedAchievement);
   }
 
   /**
-   * Partially update an Achievement and return the AchievementResponse.
+   * Delete an Achievement by its Id. Also remove this Achievement from the prerequisite list of
+   * each of its children.
    *
-   * @param userId The Id of the User the Achievement belongs to
-   * @param achievementId The Id of the Achievement
-   * @param updates The updates to be applied to the Achievement
-   * @return The AchievementResponse DTO of the updated Achievement
+   * @param achievementId The Id of the Achievement to be deleted.
    */
-  public AchievementResponse patchResponse(ObjectId userId, ObjectId achievementId,
-      JsonMergePatch updates) {
-    return AchievementMapper.fromAchievement(patch(userId, achievementId, updates));
-  }
-
+  @Transactional
   public void deleteById(ObjectId achievementId) {
+    logger.info("deleteById(achievementId={})", achievementId);
+    logger.info("achievementRepository.findById(achievementId={})", achievementId);
+    Achievement achievement = achievementRepository.findById(achievementId)
+        .orElseThrow(() -> new NotFoundException("achievements",
+            Map.of("achievementId", achievementId.toString())));
+    List<ObjectId> prerequisites = achievement.getPrerequisites();
+    logger.info(
+        "achievementRepository.findByUserIdAndPrerequisitesContaining(userId={}, achievementId={})",
+        achievement.getUserId(), achievementId);
+    List<Achievement> children = achievementRepository
+        .findByUserIdAndPrerequisitesContaining(achievement.getUserId(), achievementId);
+    for (Achievement child : children) {
+      Set<ObjectId> merged = new HashSet<>(child.getPrerequisites());
+      merged.remove(achievementId);
+      merged.addAll(prerequisites);
+      child.setPrerequisites(new ArrayList<>(merged));
+    }
+    logger.info("achievementRepository.saveAll(children={})", children);
+    achievementRepository.saveAll(children);
+    logger.info("achievementRepository.deleteById(achievementId={})", achievementId);
     achievementRepository.deleteById(achievementId);
   }
 
+  /**
+   * Delete an Achievement matching the provided userId and Id.
+   *
+   * @param userId The Id of the User the Achievement belongs to
+   * @param achievementId The Id of the Achievement
+   */
+  public void deleteByUserIdAndId(ObjectId userId, ObjectId achievementId) {
+    logger.info("deleteByUserIdAndId(userId={}, achievementId={})", userId, achievementId);
+    logger.info("achievementRepository.findByUserIdAndId(userId={}, achievementId={})", userId,
+        achievementId);
+    achievementRepository.findByUserIdAndId(userId, achievementId)
+        .orElseThrow(() -> new NotFoundException("achievements",
+            Map.of("userId", userId.toString(), "achievementId", achievementId.toString())));
+    deleteById(achievementId);
+  }
+
   public void deleteByUserId(ObjectId userId) {
+    logger.info("deleteByUserId(userId={})", userId);
+    logger.info("achievementRepository.deleteByUserId(userId={})", userId);
     achievementRepository.deleteByUserId(userId);
   }
 
   public void deleteByUserIdAndTreeId(ObjectId userId, ObjectId treeId) {
+    logger.info("deleteByUserIdAndTreeId(userId={}, treeId={})", userId, treeId);
+    logger.info("achievementRepository.deleteByUserIdAndTreeId(userId={}, treeId={})", userId,
+        treeId);
     achievementRepository.deleteByUserIdAndTreeId(userId, treeId);
   }
 }

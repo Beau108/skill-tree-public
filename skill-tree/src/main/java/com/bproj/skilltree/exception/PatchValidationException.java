@@ -1,10 +1,12 @@
 package com.bproj.skilltree.exception;
 
-import java.util.List;
-import java.util.Map;
-
+/**
+ * Thrown when a patch request contains invalid parameters.
+ */
 public class PatchValidationException extends RuntimeException {
-	public PatchValidationException(String message) {
-		super(message);
-	}
+  private static final long serialVersionUID = 1L;
+
+  public PatchValidationException(String message) {
+    super(message);
+  }
 }

@@ -10,8 +10,8 @@ public class TreeFeedItem implements FeedItem {
   private String displayName;
   private String profilePictureUrl;
   private String name;
-  private String description;
   private String backgroundUrl;
+  private String description;
 
   /**
    * Explicit value constructor.

@@ -2,6 +2,7 @@ package com.bproj.skilltree.dto;
 
 import com.bproj.skilltree.model.AchievementLocation;
 import com.bproj.skilltree.model.SkillLocation;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import org.bson.types.ObjectId;
 
@@ -9,8 +10,11 @@ import org.bson.types.ObjectId;
  * Contains Orientation information required to perform an update.
  */
 public class OrientationRequest {
+  @NotNull
   private ObjectId treeId;
+  @NotNull
   private List<SkillLocation> skillLocations;
+  @NotNull
   private List<AchievementLocation> achievementLocations;
 
   /**

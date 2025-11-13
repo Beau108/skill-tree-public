@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 
 /**
- * This class is mean to perform operations on the Authentication component in incoming requests.
+ * This class is meant to perform operations on the Authentication component in incoming requests.
  */
 @Component
 public class AuthUtils {

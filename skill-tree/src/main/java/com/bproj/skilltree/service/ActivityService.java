@@ -13,33 +13,34 @@ import com.bproj.skilltree.model.Activity;
 import com.bproj.skilltree.model.Skill;
 import com.bproj.skilltree.model.SkillWeight;
 import com.bproj.skilltree.model.User;
-import com.bproj.skilltree.util.JsonMergePatchUtils;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import com.bproj.skilltree.util.PatchUtils;
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Implements business logic for 'activities' collection.
  */
 @Service
 public class ActivityService {
+  private static final Logger logger = LoggerFactory.getLogger(ActivityService.class);
   private final ActivityRepository activityRepository;
   private final UserRepository userRepository;
   private final SkillRepository skillRepository;
+  private final SkillService skillService;
 
-  private static final String NAME_REGEX = "^[\\p{L}\\p{N}\\p{P}\\p{Zs}]{1,50}$";
-  private static final String DESC_REGEX = "^[\\p{L}\\p{N}\\p{P}\\p{Zs}]{1,500}$";
 
   /**
    * Create an ActivityService.
@@ -52,10 +53,12 @@ public class ActivityService {
   public ActivityService(
       @Qualifier("mongoActivityRepository") ActivityRepository activityRepository,
       @Qualifier("mongoUserRepository") UserRepository userRepository,
-      @Qualifier("mongoSkillRepository") SkillRepository skillRepository) {
+      @Qualifier("mongoSkillRepository") SkillRepository skillRepository,
+      SkillService skillService) {
     this.activityRepository = activityRepository;
     this.userRepository = userRepository;
     this.skillRepository = skillRepository;
+    this.skillService = skillService;
   }
 
   /**
@@ -70,65 +73,45 @@ public class ActivityService {
     // userId
     ObjectId userId = activity.getUserId();
     if (!userRepository.existsById(userId)) {
-      throw new BadRequestException(
-          String.format("userId {%s} must reference an existing user.", userId.toString()));
-    }
-
-    // name
-    Pattern ptName = Pattern.compile(NAME_REGEX);
-    Matcher mtName = ptName.matcher(activity.getName());
-    if (!mtName.matches()) {
-      throw new BadRequestException(
-          String.format("Name {%s} must be 1-50 characters long.", activity.getName()));
-    }
-
-    // desc
-    Pattern ptDesc = Pattern.compile(DESC_REGEX);
-    Matcher mtDesc = ptDesc.matcher(activity.getDescription());
-    if (!mtDesc.matches()) {
-      throw new BadRequestException(String.format("Description {%s} must be 1-500 characters long.",
-          activity.getDescription()));
+      throw new BadRequestException("Activity must reference an existing user.");
     }
 
     // duration
     double duration = activity.getDuration();
     if (duration < 0 || duration > 12) {
-      throw new BadRequestException(
-          String.format("Duration {%s} must be between 0 and 12 hours.", duration));
+      throw new BadRequestException("Duration must be between 0 and 12 hours.");
     }
 
     // weights
     List<SkillWeight> skillWeights = activity.getSkillWeights();
     if (skillWeights.size() < 1) {
-      throw new BadRequestException("SkillWeights must have atleast one skill.");
+      throw new BadRequestException("Activity must have at least one skill.");
     }
 
     double sumWeights = 0;
     for (SkillWeight sw : skillWeights) {
       double weight = sw.getWeight();
       if (weight < 0) {
-        throw new BadRequestException(
-            String.format("SkillWeight weight {%s} cannot be negative.", weight));
+        throw new BadRequestException("Skill weight cannot be negative.");
       } else if (weight > 1) {
-        throw new BadRequestException(
-            String.format("SkillWeight weight {%s} cannot be > 1.", weight));
+        throw new BadRequestException("Skill weight cannot be greater than 1.");
       }
       sumWeights += weight;
 
       ObjectId skillId = sw.getSkillId();
       if (!skillRepository.existsByUserIdAndId(userId, skillId)) {
-        throw new BadRequestException(String.format(
-            "SkillWeight skillId {%s} must reference an existing skill owned by user {%s}.",
-            skillId.toString(), userId.toString()));
+        throw new BadRequestException(
+            "Skill weight must reference an existing skill owned by the user.");
       }
     }
     if (Math.abs(sumWeights - 1.0) > 0.05) {
-      throw new BadRequestException(
-          String.format("SkillWeight weights must sum to ~1. Current sum: {%s}", sumWeights));
+      throw new BadRequestException("Skill weights must sum to approximately 1.");
     }
   }
 
-  private List<Skill> getSkills(Activity activity) {
+  public List<Skill> getSkillsForActivity(Activity activity) {
+    logger.info("getSkillsForActivity(activity={})", activity);
+    logger.info("skillRepository.findByIdIn(skillIds={})", activity.getSkillWeights().stream().map(sw -> sw.getSkillId()).toList());
     return skillRepository
         .findByIdIn(activity.getSkillWeights().stream().map(sw -> sw.getSkillId()).toList());
   }
@@ -139,13 +122,15 @@ public class ActivityService {
    * @param activities The List of Activities to be mapped to ActivityResponses
    * @return The List of ActivityResponses
    */
-  private List<ActivityResponse> getResponses(List<Activity> activities) {
+  public List<ActivityResponse> mapActivitiesToResponses(List<Activity> activities) {
+    logger.info("mapActivitiesToResponses(activities={})", activities);
     if (activities.isEmpty()) {
       return List.of();
     }
     List<ObjectId> skillIds =
         activities.stream().flatMap(a -> a.getSkillWeights().stream().map(SkillWeight::getSkillId))
             .distinct().toList();
+    logger.info("skillRepository.findByIdIn(skillIds={})", skillIds);
     Map<ObjectId, Skill> skillMap = skillRepository.findByIdIn(skillIds).stream()
         .collect(Collectors.toMap(Skill::getId, s -> s));
     return activities.stream().map(a -> {
@@ -156,26 +141,36 @@ public class ActivityService {
   }
 
 
-  public Activity create(Activity activity) {
-    validateActivity(activity);
-    return activityRepository.insert(activity);
-  }
-
-  public ActivityResponse createResponse(Activity activity) {
-    List<Skill> skills = getSkills(activity);
-    return ActivityMapper.fromActivity(create(activity), skills);
-  }
-
-  public ActivityResponse createResponse(ObjectId userId, Activity activity) {
+  /**
+   * Create a new Activity. Add weight * duration hours to each referenced Skill.
+   *
+   * @param activity The Activity to be created
+   * @param userId The Id of the User the Activity belongs to
+   * @return The created Activity
+   */
+  @Transactional
+  public Activity create(Activity activity, ObjectId userId) {
+    logger.info("create(activity={}, userId={})", activity, userId);
     activity.setUserId(userId);
-    return createResponse(activity);
+    validateActivity(activity);
+    logger.info("activityRepository.insert(activity={})", activity);
+    Activity createdActivity = activityRepository.insert(activity);
+    double duration = createdActivity.getDuration();
+    createdActivity.getSkillWeights().forEach(sw -> {
+      skillService.addHours(sw.getSkillId(), duration * sw.getWeight());
+    });
+    return createdActivity;
   }
 
   public boolean existsById(ObjectId activityId) {
+    logger.info("existsById(activityId={})", activityId);
+    logger.info("activityRepository.existsById(activityId={})", activityId);
     return activityRepository.existsById(activityId);
   }
 
   public boolean existsByUserIdAndId(ObjectId userId, ObjectId activityId) {
+    logger.info("existsByUserIdAndId(userId={}, activityId={})", userId, activityId);
+    logger.info("activityRepository.existsByUserIdAndId(userId={}, activityId={})", userId, activityId);
     return activityRepository.existsByUserIdAndId(userId, activityId);
   }
 
@@ -185,24 +180,16 @@ public class ActivityService {
    * @param activityId The Id of the desired Activity
    * @return The Activity. If not found, throws NFE.
    */
-  public Activity getEntityById(ObjectId activityId) {
-    return activityRepository.findById(activityId)
-        .orElseThrow(() -> new NotFoundException(Map.of("activityId", activityId.toString())));
+  public Activity findById(ObjectId activityId) {
+    logger.info("findById(activityId={})", activityId);
+    logger.info("activityRepository.findById(activityId={})", activityId);
+    return activityRepository.findById(activityId).orElseThrow(
+        () -> new NotFoundException("activities", Map.of("activityId", activityId.toString())));
   }
 
-  /**
-   * Find and Activity and create/return an ActivityResponse.
-   *
-   * @param activityId The Id of the Activity
-   * @return ActivityResponse
-   */
-  public ActivityResponse getResponseById(ObjectId activityId) {
-    Activity activity = activityRepository.findById(activityId)
-        .orElseThrow(() -> new NotFoundException(Map.of("activityId", activityId.toString())));
-    return ActivityMapper.fromActivity(activity, getSkills(activity));
-  }
-
-  public List<Activity> getEntitiesByUserId(ObjectId userId) {
+  public List<Activity> findByUserId(ObjectId userId) {
+    logger.info("findByUserId(userId={})", userId);
+    logger.info("activityRepository.findByUserId(userId={})", userId);
     return activityRepository.findByUserId(userId);
   }
 
@@ -213,36 +200,14 @@ public class ActivityService {
    * @param skillId (optional) The skillId Activities must have to be pat of the return list.
    * @return A List of Activities satisfying all query parameters.
    */
-  public List<Activity> getEntitiesByUserId(ObjectId userId, ObjectId skillId) {
+  public List<Activity> findByUserId(ObjectId userId, ObjectId skillId) {
+    logger.info("findByUserId(userId={}, skillId={})", userId, skillId);
     if (skillId != null) {
+      logger.info("activityRepository.findByUserIdAndSkillWeightsSkillId(userId={}, skillId={})", userId, skillId);
       return activityRepository.findByUserIdAndSkillWeightsSkillId(userId, skillId);
     }
+    logger.info("activityRepository.findByUserId(userId={})", userId);
     return activityRepository.findByUserId(userId);
-  }
-
-  /**
-   * Finds Activities matching userId. Returns a list of ActivityResponses.
-   *
-   * @param userId The Id of the User
-   * @return The List of ActivityResponses
-   */
-  public List<ActivityResponse> getResponsesByUserId(ObjectId userId) {
-    List<Activity> activities = activityRepository.findByUserId(userId);
-    return getResponses(activities);
-  }
-
-  /**
-   * Finds Activities matching userId and containing a Skill with skillId.
-   *
-   * @param userId The Id of the User the Activities belong to
-   * @param skillId (optional) The Id of the Skill returned Activities use
-   * @return The List of ActivityResponses
-   */
-  public List<ActivityResponse> getResponsesByUserId(ObjectId userId, ObjectId skillId) {
-    if (skillId == null) {
-      return getResponsesByUserId(userId);
-    }
-    return getResponses(activityRepository.findByUserIdAndSkillWeightsSkillId(userId, skillId));
   }
 
   /**
@@ -252,36 +217,21 @@ public class ActivityService {
    * @param activityId The Id of the Activity
    * @return The matching Activity. Throws NFE otherwise.
    */
-  public Activity getEntityByUserIdAndId(ObjectId userId, ObjectId activityId) {
-    Optional<Activity> optionalActivity = activityRepository.findByUserIdAndId(userId, activityId);
-    if (optionalActivity.isEmpty()) {
-      throw new NotFoundException(
-          Map.of("userId", userId.toString(), "activityId", activityId.toString()));
-    }
-    return optionalActivity.get();
-  }
-
-  /**
-   * Finds the Activity matching userId and activityId.
-   *
-   * @param userId The Id of the User the Activity belongs to
-   * @param activityId The Id of the Activity
-   * @return The ActivityResponse of the Activity
-   */
-  public ActivityResponse getResponseByUserIdAndId(ObjectId userId, ObjectId activityId) {
-    Activity activity = activityRepository.findByUserIdAndId(userId, activityId)
-        .orElseThrow(() -> new NotFoundException(
+  public Activity findByUserIdAndId(ObjectId userId, ObjectId activityId) {
+    logger.info("findByUserIdAndId(userId={}, activityId={})", userId, activityId);
+    logger.info("activityRepository.findByUserIdAndId(userId={}, activityId={})", userId, activityId);
+    return activityRepository.findByUserIdAndId(userId, activityId)
+        .orElseThrow(() -> new NotFoundException("activities",
             Map.of("userId", userId.toString(), "activityId", activityId.toString())));
-    return ActivityMapper.fromActivity(activity, getSkills(activity));
   }
 
-  private List<ActivityFeedItem> getFeedItems(List<Activity> activities) {
+  private List<ActivityFeedItem> mapActivitiesToFeedItems(List<Activity> activities) {
     List<ObjectId> userIds = activities.stream().map(Activity::getUserId).distinct().toList();
     Map<ObjectId, User> userMap =
         userRepository.findByIdIn(userIds).stream().collect(Collectors.toMap(User::getId, u -> u));
     List<ObjectId> skillIds =
         activities.stream().flatMap(a -> a.getSkillWeights().stream().map(SkillWeight::getSkillId))
-        .distinct().toList();
+            .distinct().toList();
     Map<ObjectId, Skill> skillMap = skillRepository.findByIdIn(skillIds).stream()
         .collect(Collectors.toMap(Skill::getId, s -> s));
     return activities.stream().map(a -> {
@@ -290,7 +240,7 @@ public class ActivityService {
       return ActivityMapper.toActivityFeedItem(a, skills, userMap.get(a.getUserId()));
     }).toList();
   }
-  
+
   /**
    * Get the list of feed items for users in userIds for the past 'days' days.
    *
@@ -298,7 +248,8 @@ public class ActivityService {
    * @param days The number of days from the present to search for Activities
    * @return The List of ActivityFeedItems
    */
-  public List<ActivityFeedItem> getFeedItems(List<ObjectId> userIds, int days) {
+  public List<ActivityFeedItem> getActivityFeedItemsByUserIds(List<ObjectId> userIds, int days) {
+    logger.info("getActivityFeedItemsByUserIds(userIds={}, days={})", userIds, days);
     if (userIds.isEmpty()) {
       return List.of();
     }
@@ -307,23 +258,10 @@ public class ActivityService {
     Instant endInstant =
         LocalDate.now(ZoneOffset.UTC).plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
+    logger.info("activityRepository.findByUserIdInAndCreatedAtBetween(userIds={}, startInstant={}, endInstant={})", userIds, startInstant, endInstant);
     List<Activity> activities =
         activityRepository.findByUserIdInAndCreatedAtBetween(userIds, startInstant, endInstant);
-    return getFeedItems(activities);
-  }
-
-  /**
-   * Fully update an Activity.
-   *
-   * @param updatedActivity The new Activity to overwrite the previous one
-   * @return The modified Activity. Throws NFE otherwise.
-   */
-  public Activity update(Activity updatedActivity) {
-    if (existsById(updatedActivity.getId())) {
-      validateActivity(updatedActivity);
-      return activityRepository.save(updatedActivity);
-    }
-    throw new NotFoundException(Map.of("activityId", updatedActivity.getId().toString()));
+    return mapActivitiesToFeedItems(activities);
   }
 
   /**
@@ -331,32 +269,44 @@ public class ActivityService {
    *
    * @param userId References the user the Activity belongs to
    * @param activityId Id of the Activity to be updated
-   * @param newActivity The new Activity
+   * @param updatedActivity The new Activity
    * @return The updated Activity
    */
-  public Activity update(ObjectId userId, ObjectId activityId, Activity newActivity) {
-    if (!activityRepository.existsByUserIdAndId(userId, activityId)) {
-      throw new NotFoundException(
-          Map.of("userId", userId.toString(), "activityId", activityId.toString()));
-    }
-    newActivity.setId(activityId);
-    validateActivity(newActivity);
-    newActivity.setUpdatedAt(Instant.now());
-    return activityRepository.save(newActivity);
-  }
+  @Transactional
+  public Activity update(ObjectId userId, ObjectId activityId, Activity updatedActivity) {
+    logger.info("update(userId={}, activityId={}, updatedActivity={})", userId, activityId, updatedActivity);
+    Activity existingActivity = findByUserIdAndId(userId, activityId);
 
-  /**
-   * Fully update an Activity given a userId, activityId, and updated Activity.
-   *
-   * @param userId The Id of the User the Activity belongs to
-   * @param activityId The Id of the Activity to be updated
-   * @param newActivity The new version of the Activity
-   * @return The ActivityResponse of the updated Activity.
-   */
-  public ActivityResponse updateResponse(ObjectId userId, ObjectId activityId,
-      Activity newActivity) {
-    Activity updated = update(userId, activityId, newActivity);
-    return ActivityMapper.fromActivity(updated, getSkills(newActivity));
+    updatedActivity.setId(existingActivity.getId());
+    updatedActivity.setUserId(userId);
+
+    validateActivity(updatedActivity);
+
+    Map<ObjectId, Double> skillTimeDiffs = new HashMap<>();
+
+    double oldDuration = existingActivity.getDuration();
+    for (SkillWeight sw : existingActivity.getSkillWeights()) {
+      skillTimeDiffs.put(sw.getSkillId(), oldDuration * sw.getWeight() * -1);
+    }
+
+    double newDuration = updatedActivity.getDuration();
+    for (SkillWeight sw : updatedActivity.getSkillWeights()) {
+      if (skillTimeDiffs.containsKey(sw.getSkillId())) {
+        double temp = skillTimeDiffs.get(sw.getSkillId());
+        skillTimeDiffs.put(sw.getSkillId(), temp + sw.getWeight() * newDuration);
+      } else {
+        skillTimeDiffs.put(sw.getSkillId(), sw.getWeight() * newDuration);
+      }
+    }
+
+    skillTimeDiffs.entrySet().forEach(e -> {
+      ObjectId skillId = e.getKey();
+      double value = e.getValue();
+      skillService.addHours(skillId, value);
+    });
+
+    logger.info("activityRepository.save(updatedActivity={})", updatedActivity);
+    return activityRepository.save(updatedActivity);
   }
 
   /**
@@ -367,23 +317,46 @@ public class ActivityService {
    * @param updates The changes to be made to the Activity
    * @return The updated Activity. Throws NFE otherwise.
    */
-  public Activity patch(ObjectId userId, ObjectId activityId, JsonMergePatch updates) {
-    Activity activity = activityRepository.findByUserIdAndId(userId, activityId)
-        .orElseThrow(() -> new NotFoundException(
+  @Transactional
+  public Activity patch(ObjectId userId, ObjectId activityId, Map<String, Object> updates) {
+    logger.info("patch(userId={}, activityId={}, updates={})", userId, activityId, updates);
+    logger.info("activityRepository.findByUserIdAndId(userId={}, activityId={})", userId, activityId);
+    Activity existingActivity = activityRepository.findByUserIdAndId(userId, activityId)
+        .orElseThrow(() -> new NotFoundException("activities",
             Map.of("userId", userId.toString(), "activityId", activityId.toString())));
-    Activity updated = JsonMergePatchUtils.applyMergePatch(updates, activity, Activity.class);
-    updated.setUserId(userId);
-    updated.setId(activityId);
-    updated.setCreatedAt(activity.getCreatedAt());
-    updated.setUpdatedAt(Instant.now());
-    validateActivity(updated);
-    return activityRepository.save(updated);
-  }
 
-  public ActivityResponse patchResponse(ObjectId userId, ObjectId activityId,
-      JsonMergePatch updates) {
-    Activity patched = patch(userId, activityId, updates);
-    return ActivityMapper.fromActivity(patched, getSkills(patched));
+    Activity updatedActivity = PatchUtils.applyActivityPatch(existingActivity, updates);
+
+    updatedActivity.setUserId(existingActivity.getUserId());
+    updatedActivity.setId(existingActivity.getId());
+
+    validateActivity(updatedActivity);
+
+    Map<ObjectId, Double> skillTimeDiffs = new HashMap<>();
+
+    double oldDuration = existingActivity.getDuration();
+    for (SkillWeight sw : existingActivity.getSkillWeights()) {
+      skillTimeDiffs.put(sw.getSkillId(), oldDuration * sw.getWeight() * -1);
+    }
+
+    double newDuration = updatedActivity.getDuration();
+    for (SkillWeight sw : updatedActivity.getSkillWeights()) {
+      if (skillTimeDiffs.containsKey(sw.getSkillId())) {
+        double temp = skillTimeDiffs.get(sw.getSkillId());
+        skillTimeDiffs.put(sw.getSkillId(), temp + sw.getWeight() * newDuration);
+      } else {
+        skillTimeDiffs.put(sw.getSkillId(), sw.getWeight() * newDuration);
+      }
+    }
+
+    skillTimeDiffs.entrySet().forEach(e -> {
+      ObjectId skillId = e.getKey();
+      double value = e.getValue();
+      skillService.addHours(skillId, value);
+    });
+
+    logger.info("activityRepository.save(updatedActivity={})", updatedActivity);
+    return activityRepository.save(updatedActivity);
   }
 
   /**
@@ -394,25 +367,59 @@ public class ActivityService {
    * @return The RecentActivityDTO
    */
   public RecentActivity getRecentActivityByUserId(ObjectId userId, int days) {
+    logger.info("getRecentActivityByUserId(userId={}, days={})", userId, days);
     Instant startInstant =
         LocalDate.now(ZoneOffset.UTC).minusDays(days).atStartOfDay().toInstant(ZoneOffset.UTC);
     Instant endInstant =
         LocalDate.now(ZoneOffset.UTC).plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
+    logger.info("activityRepository.findByUserIdAndCreatedAtBetween(userId={}, startInstant={}, endInstant={})", userId, startInstant, endInstant);
     List<Activity> activities =
         activityRepository.findByUserIdAndCreatedAtBetween(userId, startInstant, endInstant);
     return ActivityMapper.toRecentActivity(activities);
   }
 
+  /**
+   * Delete an Activity given its Id. Also removes the duration * weight from each involved skill's
+   * timeSpentHours.
+   *
+   * @param activityId The Id of the Activity to be deleted
+   */
+  @Transactional
   public void deleteById(ObjectId activityId) {
+    logger.info("deleteById(activityId={})", activityId);
+    logger.info("activityRepository.findById(activityId={})", activityId);
+    Activity activity = activityRepository.findById(activityId).orElseThrow(
+        () -> new NotFoundException("activities", Map.of("activityId", activityId.toString())));
+    double duration = activity.getDuration();
+    activity.getSkillWeights().forEach(sw -> {
+      skillService.addHours(sw.getSkillId(), sw.getWeight() * duration * -1);
+    });
+    logger.info("activityRepository.deleteById(activityId={})", activityId);
     activityRepository.deleteById(activityId);
   }
 
+  @Transactional
   public void deleteByUserId(ObjectId userId) {
-    activityRepository.deleteByUserId(userId);
+    logger.info("deleteByUserId(userId={})", userId);
+    logger.info("activityRepository.findByUserId(userId={})", userId);
+    activityRepository.findByUserId(userId).forEach(activity -> deleteById(activity.getId()));
   }
 
+  /**
+   * Delete an Activity given its userId and Id. Also removes the duration * weight from each
+   * involved skill's timeSpentHours.
+   *
+   * @param userId The Id of the User the Activity belongs to
+   * @param activityId The Id of the Activity
+   */
   public void deleteByUserIdAndId(ObjectId userId, ObjectId activityId) {
+    logger.info("deleteByUserIdAndId(userId={}, activityId={})", userId, activityId);
+    logger.info("activityRepository.findByUserIdAndId(userId={}, activityId={})", userId, activityId);
+    activityRepository.findByUserIdAndId(userId, activityId)
+        .orElseThrow(() -> new NotFoundException("activities",
+            Map.of("userId", userId.toString(), "activityId", activityId.toString())));
+    logger.info("activityRepository.deleteByUserIdAndId(userId={}, activityId={})", userId, activityId);
     activityRepository.deleteByUserIdAndId(userId, activityId);
   }
 }

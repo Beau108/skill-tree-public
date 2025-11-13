@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -15,26 +16,36 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * image URL. image url.
  */
 @Document(collection = "skills")
+@ToString(onlyExplicitlyIncluded = true)
 public class Skill {
   @Id
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId id;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId userId;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId treeId;
   @NotBlank
+  @ToString.Include
   private String name;
+  @ToString.Include
   private String backgroundUrl;
   @NotBlank
+  @ToString.Include
   private double timeSpentHours;
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId parentSkillId;
   @CreatedDate
+  @ToString.Include
   private Instant createdAt;
   @LastModifiedDate
+  @ToString.Include
   private Instant updatedAt;
 
 
@@ -77,6 +88,18 @@ public class Skill {
     this.backgroundUrl = backgroundUrl;
     this.timeSpentHours = timeSpentHours;
     this.parentSkillId = parentSkillId;
+  }
+
+  public Skill(Skill other) {
+      this.id = other.id;
+      this.userId = other.userId;
+      this.treeId = other.treeId;
+      this.name = other.name;
+      this.backgroundUrl = other.backgroundUrl;
+      this.timeSpentHours = other.timeSpentHours;
+      this.parentSkillId = other.parentSkillId;
+      this.createdAt = other.createdAt;
+      this.updatedAt = other.updatedAt;
   }
 
   public ObjectId getId() {

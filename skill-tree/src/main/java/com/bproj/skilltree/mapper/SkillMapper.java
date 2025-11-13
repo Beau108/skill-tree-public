@@ -4,6 +4,7 @@ import com.bproj.skilltree.dto.SkillRequest;
 import com.bproj.skilltree.dto.SkillResponse;
 import com.bproj.skilltree.dto.SkillSummary;
 import com.bproj.skilltree.model.Skill;
+import org.bson.types.ObjectId;
 
 /**
  * Skill DTO conversions.
@@ -22,9 +23,9 @@ public class SkillMapper {
       return null;
     }
 
-    return new Skill(skillRequest.getTreeId(), skillRequest.getName(),
+    return new Skill(new ObjectId(skillRequest.getTreeId()), skillRequest.getName(),
         skillRequest.getBackgroundUrl(), skillRequest.getTimeSpentHours(),
-        skillRequest.getParentSkillId());
+        skillRequest.getParentSkillId() != null ? new ObjectId(skillRequest.getParentSkillId()) : null);
   }
 
   /**
@@ -38,8 +39,8 @@ public class SkillMapper {
       return null;
     }
 
-    return new SkillResponse(skill.getId(), skill.getTreeId(), skill.getName(),
-        skill.getBackgroundUrl(), skill.getTimeSpentHours(), skill.getParentSkillId());
+    return new SkillResponse(skill.getId().toString(), skill.getTreeId().toString(), skill.getName(),
+        skill.getBackgroundUrl(), skill.getTimeSpentHours(), skill.getParentSkillId() != null ? skill.getParentSkillId().toString() : null);
   }
 
   /**

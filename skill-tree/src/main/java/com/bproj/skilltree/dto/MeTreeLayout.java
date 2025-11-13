@@ -1,6 +1,5 @@
 package com.bproj.skilltree.dto;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.Map;
 import org.bson.types.ObjectId;
@@ -11,11 +10,8 @@ import org.bson.types.ObjectId;
  */
 public class MeTreeLayout {
   @NotNull
-  @Valid
   private Map<ObjectId, MeSkillLayout> skillLayout;
-
   @NotNull
-  @Valid
   private Map<ObjectId, MeAchievementLayout> achievementLayout;
 
   public MeTreeLayout() {

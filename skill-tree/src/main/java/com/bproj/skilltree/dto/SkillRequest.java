@@ -1,9 +1,11 @@
 package com.bproj.skilltree.dto;
 
+import com.bproj.skilltree.util.RegexPatterns;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import org.bson.types.ObjectId;
 
@@ -11,21 +13,22 @@ import org.bson.types.ObjectId;
  * Incoming essential Skill information.
  */
 public class SkillRequest {
-  private ObjectId id;
   @NotNull
-  private ObjectId treeId;
-  @NotBlank
+  private String treeId;
+  @Pattern(regexp = RegexPatterns.SKILL_NAME)
+  @NotNull
   private String name;
+  @Pattern(regexp = RegexPatterns.IMAGE_URL)
+  @Nullable
   private String backgroundUrl;
   @NotNull
   @PositiveOrZero
   private double timeSpentHours;
-  private ObjectId parentSkillId;
+  private String parentSkillId;
 
   /**
    * Explicit value constructor.
    *
-   * @param id             The ID of the Skill
    * @param treeId         The ID of the Tree this Skill belongs to
    * @param name           The name of the Skill
    * @param backgroundUrl  The background URL for the Skill
@@ -34,13 +37,11 @@ public class SkillRequest {
    */
   @JsonCreator
   public SkillRequest(
-      @JsonProperty("id") ObjectId id,
-      @JsonProperty("treeId") ObjectId treeId,
+      @JsonProperty("treeId") String treeId,
       @JsonProperty("name") String name,
       @JsonProperty("backgroundUrl") String backgroundUrl,
       @JsonProperty("timeSpentHours") double timeSpentHours,
-      @JsonProperty("parentSkillId") ObjectId parentSkillId) {
-    this.id = id;
+      @JsonProperty("parentSkillId") String parentSkillId) {
     this.treeId = treeId;
     this.name = name;
     this.backgroundUrl = backgroundUrl;
@@ -48,19 +49,11 @@ public class SkillRequest {
     this.parentSkillId = parentSkillId;
   }
 
-  public ObjectId getId() {
-    return id;
-  }
-
-  public void setId(ObjectId id) {
-    this.id = id;
-  }
-
-  public ObjectId getTreeId() {
+  public String getTreeId() {
     return treeId;
   }
 
-  public void setTreeId(ObjectId treeId) {
+  public void setTreeId(String treeId) {
     this.treeId = treeId;
   }
 
@@ -88,11 +81,11 @@ public class SkillRequest {
     this.timeSpentHours = timeSpentHours;
   }
 
-  public ObjectId getParentSkillId() {
+  public String getParentSkillId() {
     return parentSkillId;
   }
 
-  public void setParentSkillId(ObjectId parentSkillId) {
+  public void setParentSkillId(String parentSkillId) {
     this.parentSkillId = parentSkillId;
   }
 }

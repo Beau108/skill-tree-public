@@ -38,4 +38,6 @@ public interface FriendshipRepository extends MongoRepository<Friendship, Object
 
   void deleteByRequesterIdOrAddresseeIdAndId(ObjectId requesterId, ObjectId addresseeId,
       ObjectId id);
+  
+  void deleteByRequesterIdOrAddresseeId(ObjectId requesterId, ObjectId addresseeId);
 }

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -16,24 +17,33 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * An activity completed by the User that used one or more of their Skills.
  */
 @Document(collection = "activities")
+@ToString(onlyExplicitlyIncluded = false)
 public class Activity {
   @Id
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId id;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId userId;
   @NotBlank
+  @ToString.Include
   private String name;
+  @ToString.Include
   private String description;
   @NotBlank
+  @ToString.Include
   private double duration;
   @NotBlank
   @JsonSerialize(contentUsing = ToStringSerializer.class)
+  @ToString.Include
   private List<SkillWeight> skillWeights;
   @CreatedDate
+  @ToString.Include
   private Instant createdAt;
   @LastModifiedDate
+  @ToString.Include
   private Instant updatedAt;
 
   public Activity() {}
@@ -70,6 +80,17 @@ public class Activity {
     this.description = description;
     this.duration = duration;
     this.skillWeights = skillWeights;
+  }
+
+  public Activity(Activity other) {
+      this.id = other.id;
+      this.userId = other.userId;
+      this.name = other.name;
+      this.description = other.description;
+      this.duration = other.duration;
+      this.skillWeights = new ArrayList<>(other.skillWeights);
+      this.createdAt = other.createdAt;
+      this.updatedAt = other.updatedAt;
   }
 
   public ObjectId getId() {

@@ -6,6 +6,7 @@ import com.bproj.skilltree.dto.AchievementResponse;
 import com.bproj.skilltree.dto.AchievementSummary;
 import com.bproj.skilltree.model.Achievement;
 import com.bproj.skilltree.model.User;
+import org.bson.types.ObjectId;
 
 /**
  * Achievement DTO conversions.
@@ -23,8 +24,8 @@ public class AchievementMapper {
     if (achievementRequest == null) {
       return null;
     }
-    return new Achievement(achievementRequest.getTreeId(), achievementRequest.getBackgroundUrl(),
-        achievementRequest.getDescription(), achievementRequest.getPrerequisites(),
+    return new Achievement(new ObjectId(achievementRequest.getTreeId()), achievementRequest.getTitle(), achievementRequest.getBackgroundUrl(),
+        achievementRequest.getDescription(), achievementRequest.getPrerequisites().stream().map(ObjectId::new).toList(),
         achievementRequest.isComplete(), achievementRequest.getCompletedAt());
   }
 
@@ -39,9 +40,9 @@ public class AchievementMapper {
       return null;
     }
 
-    return new AchievementResponse(achievement.getId(), achievement.getTreeId(),
+    return new AchievementResponse(achievement.getId().toString(), achievement.getTreeId().toString(),
         achievement.getTitle(), achievement.getBackgroundUrl(), achievement.getDescription(),
-        achievement.getPrerequisites(), achievement.isComplete(), achievement.getCompletedAt());
+        achievement.getPrerequisites().stream().map(ObjectId::toString).toList(), achievement.isComplete(), achievement.getCompletedAt());
   }
 
   /**

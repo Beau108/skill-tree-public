@@ -1,7 +1,5 @@
 package com.bproj.skilltree.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.util.List;
 import org.bson.types.ObjectId;
@@ -12,23 +10,14 @@ import org.bson.types.ObjectId;
  * purposes.
  */
 public class MeAchievementLayout {
-  @NotNull
-  private ObjectId id;
-
-  @NotBlank
+  private String id;
   private String title;
-
   private double x;
-
   private double y;
-
   private String backgroundUrl;
-
   private boolean complete;
-
   private Instant completedAt;
-
-  private List<ObjectId> prerequisites;
+  private List<String> prerequisites;
 
   /**
    * Explicit value constructor.
@@ -42,8 +31,8 @@ public class MeAchievementLayout {
    * @param completedAt   When this Achievement was completed
    * @param prerequisites The prerequisite Achievements for this Achievement
    */
-  public MeAchievementLayout(ObjectId id, String title, double x, double y, String backgroundUrl,
-      boolean complete, Instant completedAt, List<ObjectId> prerequisites) {
+  public MeAchievementLayout(String id, String title, double x, double y, String backgroundUrl,
+      boolean complete, Instant completedAt, List<String> prerequisites) {
     this.id = id;
     this.title = title;
     this.x = x;
@@ -54,11 +43,11 @@ public class MeAchievementLayout {
     this.prerequisites = prerequisites;
   }
 
-  public ObjectId getId() {
+  public String getId() {
     return id;
   }
 
-  public void setId(ObjectId id) {
+  public void setId(String id) {
     this.id = id;
   }
 
@@ -110,11 +99,11 @@ public class MeAchievementLayout {
     this.completedAt = completedAt;
   }
 
-  public List<ObjectId> getPrerequisites() {
+  public List<String> getPrerequisites() {
     return prerequisites;
   }
 
-  public void setPrerequisites(List<ObjectId> prerequisites) {
+  public void setPrerequisites(List<String> prerequisites) {
     this.prerequisites = prerequisites;
   }
 }

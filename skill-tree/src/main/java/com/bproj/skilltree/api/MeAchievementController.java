@@ -6,13 +6,17 @@ import com.bproj.skilltree.mapper.AchievementMapper;
 import com.bproj.skilltree.model.Achievement;
 import com.bproj.skilltree.model.AchievementSortMode;
 import com.bproj.skilltree.service.AchievementService;
-import com.bproj.skilltree.service.UserService;
 import com.bproj.skilltree.util.AuthUtils;
 import com.bproj.skilltree.util.ObjectIdUtils;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
+import jakarta.json.JsonMergePatch;
+import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
+
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,7 +24,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -37,18 +40,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/achievements/me")
 public class MeAchievementController {
+  private static final Logger logger = LoggerFactory.getLogger(MeAchievementController.class);
   private final AchievementService achievementService;
   private final AuthUtils authUtils;
 
-  /**
-   * Creates a new MeAchievementController.
-   *
-   * @param achievementService Connection to Achievement Service layer
-   * @param userService Connection to User Service layer, needed for AuthUtils
-   */
-  public MeAchievementController(AchievementService achievementService, UserService userService) {
+  public MeAchievementController(AchievementService achievementService, AuthUtils authUtils) {
     this.achievementService = achievementService;
-    this.authUtils = new AuthUtils(userService);
+    this.authUtils = authUtils;
   }
 
   /**
@@ -60,12 +58,14 @@ public class MeAchievementController {
    */
   @PostMapping
   public ResponseEntity<AchievementResponse> create(Authentication auth,
-      @RequestBody AchievementRequest achievementRequest) {
+      @Valid @RequestBody AchievementRequest achievementRequest) {
+    logger.info("POST /api/achievements/me - create(achievementRequest={})", achievementRequest);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     Achievement achievement = AchievementMapper.toAchievement(achievementRequest);
-    AchievementResponse createdAchievement = achievementService.createResponse(userId, achievement);
-    return ResponseEntity.created(URI.create("/api/achievements/me/" + createdAchievement.getId()))
-        .body(createdAchievement);
+    AchievementResponse achievementResponse =
+        AchievementMapper.fromAchievement(achievementService.create(achievement, userId));
+    return ResponseEntity.created(URI.create("/api/achievements/me/" + achievementResponse.getId()))
+        .body(achievementResponse);
   }
 
   /**
@@ -80,16 +80,18 @@ public class MeAchievementController {
   @GetMapping
   public ResponseEntity<List<AchievementResponse>> queryMyAchievements(Authentication auth,
       @RequestParam(required = false) String treeId, @RequestParam(required = false) Boolean next,
-      @RequestParam(required = false) AchievementSortMode sortMode) {
+      @RequestParam(required = false, defaultValue = "TITLE") AchievementSortMode sortMode) {
+    logger.info("GET /api/achievements/me - queryMyAchievements(treeId={}, next={}, sortMode={})",
+        treeId, next, sortMode);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId treeObjectId = null;
     if (treeId != null) {
       treeObjectId = ObjectIdUtils.validateObjectId(treeId, "treeId");
     }
-
-    List<AchievementResponse> achievements =
-        achievementService.queryResponses(userId, treeObjectId, next, sortMode);
-    return ResponseEntity.ok(achievements);
+    List<AchievementResponse> achievementResponses =
+        achievementService.query(userId, treeObjectId, next, sortMode).stream()
+            .map(AchievementMapper::fromAchievement).toList();
+    return ResponseEntity.ok(achievementResponses);
   }
 
   /**
@@ -102,31 +104,13 @@ public class MeAchievementController {
   @GetMapping("/{achievementId}")
   public ResponseEntity<AchievementResponse> getOne(Authentication auth,
       @PathVariable String achievementId) {
+    logger.info("GET /api/achievements/me/{} - getOne(achievementId={})", achievementId,
+        achievementId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId achievementObjectId = ObjectIdUtils.validateObjectId(achievementId, "achievementId");
-    AchievementResponse achievementResponse =
-        achievementService.getResponseByUserIdAndId(userId, achievementObjectId);
+    AchievementResponse achievementResponse = AchievementMapper
+        .fromAchievement(achievementService.findByUserIdAndId(userId, achievementObjectId));
     return ResponseEntity.ok(achievementResponse);
-  }
-
-  /**
-   * Update an Achievement given its Id and the new version of the Achievement.
-   *
-   * @param auth JWT
-   * @param updatedAchievement The new version of the Achievement
-   * @return The AchievementResponse of the updated Achievement
-   */
-  @PutMapping("/{achievementId}")
-  public ResponseEntity<AchievementResponse> update(Authentication auth,
-      @PathVariable String achievementId, @RequestBody AchievementRequest updatedAchievement) {
-    ObjectId userId = authUtils.getUserIdByAuth(auth);
-    ObjectId achievementObjectId = ObjectIdUtils.validateObjectId(achievementId, "achievementId");
-    Achievement achievement = AchievementMapper.toAchievement(updatedAchievement);
-    achievement.setUserId(userId);
-    achievement.setId(achievementObjectId);
-    AchievementResponse result =
-        achievementService.updateResponse(userId, achievementObjectId, achievement);
-    return ResponseEntity.ok(result);
   }
 
   /**
@@ -137,14 +121,15 @@ public class MeAchievementController {
    * @param updates The updates to be applied
    * @return The updated Achievement's AchievementResponse
    */
-  @PatchMapping(path = "/{achievementId}", consumes = "application/merge-patch+json")
+  @PatchMapping(path = "/{achievementId}")
   public ResponseEntity<AchievementResponse> patch(Authentication auth,
-      @PathVariable String achievementId, @RequestBody JsonMergePatch updates) {
-
+      @PathVariable String achievementId, @RequestBody Map<String, Object> updates) {
+    logger.info("PATCH /api/achievements/me/{} - patch(achievementId={}, updates={})",
+        achievementId, achievementId, updates);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId achievementObjectId = ObjectIdUtils.validateObjectId(achievementId, "achievementId");
-    AchievementResponse updatedAchievement =
-        achievementService.patchResponse(userId, achievementObjectId, updates);
+    AchievementResponse updatedAchievement = AchievementMapper
+        .fromAchievement(achievementService.patch(userId, achievementObjectId, updates));
     return ResponseEntity.ok(updatedAchievement);
   }
 
@@ -158,6 +143,8 @@ public class MeAchievementController {
   @DeleteMapping("/{achievementId}")
   public ResponseEntity<Void> deleteByUserIdAndAchievementid(Authentication auth,
       @PathVariable String achievementId) {
+    logger.info("DELETE /api/achievements/me/{} - deleteByUserIdAndAchievementid(achievementId={})",
+        achievementId, achievementId);
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     ObjectId achievementObjectId = ObjectIdUtils.validateObjectId(achievementId, "achievementId");
     if (achievementService.existsByUserIdAndId(userId, achievementObjectId)) {
@@ -174,6 +161,7 @@ public class MeAchievementController {
    */
   @DeleteMapping
   public ResponseEntity<Void> deleteByUserId(Authentication auth) {
+    logger.info("DELETE /api/achievements/me - deleteByUserId()");
     ObjectId userId = authUtils.getUserIdByAuth(auth);
     achievementService.deleteByUserId(userId);
     return ResponseEntity.noContent().build();

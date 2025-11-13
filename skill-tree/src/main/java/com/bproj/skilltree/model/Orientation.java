@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.ToString;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -17,23 +18,31 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * locations.
  */
 @Document(collection = "orientations")
+@ToString(onlyExplicitlyIncluded = true)
 public class Orientation {
   @Id
   @JsonSerialize(using = ToStringSerializer.class)
+  @ToString.Include
   private ObjectId id;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId userId;
   @JsonSerialize(using = ToStringSerializer.class)
   @NotBlank
+  @ToString.Include
   private ObjectId treeId;
   @JsonSerialize(contentUsing = ToStringSerializer.class)
+  @ToString.Include
   private List<SkillLocation> skillLocations = new ArrayList<>();
   @JsonSerialize(contentUsing = ToStringSerializer.class)
+  @ToString.Include
   private List<AchievementLocation> achievementLocations = new ArrayList<>();
   @CreatedDate
+  @ToString.Include
   private Instant createdAt;
   @LastModifiedDate
+  @ToString.Include
   private Instant updatedAt;
 
   public Orientation() {}
@@ -79,6 +88,16 @@ public class Orientation {
     this.treeId = treeId;
     this.skillLocations = skillLocations;
     this.achievementLocations = achievementLocations;
+  }
+
+  public Orientation(Orientation other) {
+      this.id = other.id;
+      this.treeId = other.treeId;
+      this.userId = other.userId;
+      this.skillLocations = new ArrayList<>(other.skillLocations);
+      this.achievementLocations = new ArrayList<>(other.achievementLocations);
+      this.updatedAt = other.updatedAt;
+      this.createdAt = other.createdAt;
   }
 
   public ObjectId getId() {

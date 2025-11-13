@@ -1,32 +1,17 @@
 package com.bproj.skilltree.service;
 
-import com.bproj.skilltree.dao.AchievementRepository;
-import com.bproj.skilltree.dao.ActivityRepository;
-import com.bproj.skilltree.dao.SkillRepository;
-import com.bproj.skilltree.dao.TreeRepository;
-import com.bproj.skilltree.dao.UserRepository;
+import com.bproj.skilltree.dao.*;
 import com.bproj.skilltree.dto.FeedItem;
-import com.bproj.skilltree.dto.UserResponse;
 import com.bproj.skilltree.exception.BadRequestException;
 import com.bproj.skilltree.exception.NotFoundException;
 import com.bproj.skilltree.mapper.AchievementMapper;
 import com.bproj.skilltree.mapper.ActivityMapper;
 import com.bproj.skilltree.mapper.TreeMapper;
-import com.bproj.skilltree.mapper.UserMapper;
-import com.bproj.skilltree.model.Achievement;
-import com.bproj.skilltree.model.Activity;
-import com.bproj.skilltree.model.Skill;
-import com.bproj.skilltree.model.Tree;
-import com.bproj.skilltree.model.User;
-import com.bproj.skilltree.util.JsonMergePatchUtils;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
+import com.bproj.skilltree.model.*;
+import com.bproj.skilltree.util.PatchUtils;
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
@@ -34,21 +19,29 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * Implements business logic for 'users' collection.
  */
 @Service
 public class UserService {
+  private static final Logger logger = LoggerFactory.getLogger(UserService.class);
   private final UserRepository userRepository;
   private final AchievementRepository achievementRepository;
   private final ActivityRepository activityRepository;
   private final TreeRepository treeRepository;
   private final SkillRepository skillRepository;
+  private final OrientationRepository orientationRepository;
+  private final FriendshipRepository friendshipRepository;
 
-  private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$";
-  private static final String DISPLAY_NAME_REGEX = "^[A-Za-z0-9._]{3,15}$";
-  private static final String URL_REGEX = "^(https?://)?([a-zA-Z0-9.-]+\\.)?skilltree\\.com(/.*)?$";
 
   /**
    * Create a UserService object.
@@ -63,17 +56,20 @@ public class UserService {
       @Qualifier("mongoAchievementRepository") AchievementRepository achievementRepository,
       @Qualifier("mongoActivityRepository") ActivityRepository activityRepository,
       @Qualifier("mongoTreeRepository") TreeRepository treeRepository,
-      @Qualifier("mongoSkillRepository") SkillRepository skillRepository) {
+      @Qualifier("mongoSkillRepository") SkillRepository skillRepository,
+      @Qualifier("mongoOrientationRepository") OrientationRepository orientationRepository,
+      @Qualifier("mongoFriendshipRepository") FriendshipRepository friendshipRepository) {
     this.userRepository = userRepository;
     this.achievementRepository = achievementRepository;
     this.activityRepository = activityRepository;
     this.treeRepository = treeRepository;
     this.skillRepository = skillRepository;
+    this.orientationRepository = orientationRepository;
+    this.friendshipRepository = friendshipRepository;
   }
 
   /**
-   * Validates a User. DisplayName must be unique. DisplayName must be 3-15 alphanumeric characters,
-   * '.', or '_'. Email must be a proper email. URL must be under a skilltree domain.
+   * Validates a User. Display name and email must be unique.
    *
    * @param user The User to be validated
    */
@@ -83,38 +79,14 @@ public class UserService {
       throw new BadRequestException("User must have a Firebase ID.");
     }
 
+    if (user.getEmail() == null || user.getEmail().isBlank()) {
+        throw new BadRequestException("User must have an email.");
+    }
+
     // displayName uniqueness
     Optional<User> optionalUser = userRepository.findByDisplayName(user.getDisplayName());
     if (optionalUser.isPresent() && !optionalUser.get().getId().equals(user.getId())) {
-      throw new BadRequestException("The display name {" + user.getDisplayName() + "} is taken.");
-    }
-
-    // displayName format
-    Pattern ptName = Pattern.compile(DISPLAY_NAME_REGEX);
-    if (!ptName.matcher(user.getDisplayName()).matches()) {
-      throw new BadRequestException("The display name {" + user.getDisplayName()
-          + "} is invalid. Must be 3-15 alphanumeric characters, '.' and '_' allowed.");
-    }
-
-    // email uniqueness
-    Optional<User> existingByEmail = userRepository.findByEmail(user.getEmail());
-    if (existingByEmail.isPresent() && !existingByEmail.get().getId().equals(user.getId())) {
-      throw new BadRequestException("Email " + user.getEmail() + " is already in use.");
-    }
-
-    // email format
-    Pattern ptEmail = Pattern.compile(EMAIL_REGEX);
-    if (!ptEmail.matcher(user.getEmail()).matches()) {
-      throw new BadRequestException("Invalid email: " + user.getEmail());
-    }
-
-    // profile picture URL format (optional)
-    if (user.getProfilePictureUrl() != null) {
-      Pattern ptUrl = Pattern.compile(URL_REGEX);
-      if (!ptUrl.matcher(user.getProfilePictureUrl()).matches()) {
-        throw new BadRequestException(
-            "Invalid profile picture URL: " + user.getProfilePictureUrl());
-      }
+      throw new BadRequestException("Display name is already taken.");
     }
   }
 
@@ -124,16 +96,29 @@ public class UserService {
    * @param user the User to be created
    * @return The created User
    */
-  public UserResponse create(User user) {
+  public User create(User user, String firebaseId, String email) {
+    logger.info("create(user={}, firebaseId={}, email={})", user, firebaseId, email);
+    user.setFirebaseId(firebaseId);
+    user.setEmail(email);
     validateUser(user);
-    return UserMapper.fromUser(userRepository.insert(user));
+    Instant now = Instant.now();
+    user.setCreatedAt(now);
+    user.setUpdatedAt(now);
+    user.setId(new ObjectId());
+    
+    logger.info("userRepository.insert(user={})", user);
+    return userRepository.insert(user);
   }
 
   public boolean existsById(ObjectId userId) {
+    logger.info("existsById(userId={})", userId);
+    logger.info("userRepository.existsById(userId={})", userId);
     return userRepository.existsById(userId);
   }
 
   public boolean existsByFirebaseId(String firebaseId) {
+    logger.info("existsByFirebaseId(firebaseId={})", firebaseId);
+    logger.info("userRepository.existsByFirebaseId(firebaseId={})", firebaseId);
     return userRepository.existsByFirebaseId(firebaseId);
   }
 
@@ -143,20 +128,11 @@ public class UserService {
    * @param userId The Id of the desired User.
    * @return The User with id=Id. Throws NFE otherwise.
    */
-  public User getEntityById(ObjectId userId) {
+  public User findById(ObjectId userId) {
+    logger.info("findById(userId={})", userId);
+    logger.info("userRepository.findById(userId={})", userId);
     return userRepository.findById(userId)
-        .orElseThrow(() -> new NotFoundException(Map.of("userId", userId.toString())));
-  }
-
-  /**
-   * Get a UserResponse by Id.
-   *
-   * @param userId The Id of the user
-   * @return The UserResponse
-   */
-  public UserResponse getResponseById(ObjectId userId) {
-    User user = getEntityById(userId);
-    return UserMapper.fromUser(user);
+        .orElseThrow(() -> new NotFoundException("users", Map.of("userId", userId.toString())));
   }
 
   /**
@@ -165,34 +141,34 @@ public class UserService {
    * @param userIds The List of userIds for lookup
    * @return A list of Users with Ids matching those in the provided list
    */
-  public List<User> getEntitiesByIds(List<ObjectId> userIds) {
+  public List<User> findByIds(List<ObjectId> userIds) {
+    logger.info("findByIds(userIds={})", userIds);
+    logger.info("userRepository.findAllById(userIds={})", userIds);
     List<User> users = userRepository.findAllById(userIds);
     if (users.size() != userIds.size()) {
-      throw new NotFoundException(Map.of("userIds", userIds.toString()));
+      throw new NotFoundException("users", Map.of("userIds", userIds.toString()));
     }
     return users;
   }
 
-  public List<UserResponse> getResponsesByIds(List<ObjectId> userIds) {
-    return getEntitiesByIds(userIds).stream().map(UserMapper::fromUser).toList();
-  }
-
   public User findByFirebaseId(String firebaseId) {
+    logger.info("findByFirebaseId(firebaseId={})", firebaseId);
+    logger.info("userRepository.findByFirebaseId(firebaseId={})", firebaseId);
     return userRepository.findByFirebaseId(firebaseId)
-        .orElseThrow(() -> new NotFoundException(Map.of("firebaseId", firebaseId)));
+        .orElseThrow(() -> new NotFoundException("users", Map.of("firebaseId", firebaseId)));
   }
 
   public User findByEmail(String email) {
+    logger.info("findByEmail(email={})", email);
+    logger.info("userRepository.findByEmail(email={})", email);
     return userRepository.findByEmail(email)
-        .orElseThrow(() -> new NotFoundException(Map.of("email", email)));
+        .orElseThrow(() -> new NotFoundException("users", Map.of("email", email)));
   }
 
-  public List<User> findAllEntities() {
+  public List<User> findAll() {
+    logger.info("findAll()");
+    logger.info("userRepository.findAll()");
     return userRepository.findAll();
-  }
-
-  public List<UserResponse> findAllResponses() {
-    return findAllEntities().stream().map(UserMapper::fromUser).toList();
   }
 
   /**
@@ -202,29 +178,16 @@ public class UserService {
    * @return The persisted updated User
    */
   public User update(ObjectId userId, User updatedUser) {
-    if (!userRepository.existsById(userId)) {
-      throw new NotFoundException(Map.of("userId", userId.toString()));
-    }
-    updatedUser.setId(userId);
-    validateUser(updatedUser);
-    return userRepository.save(updatedUser);
-  }
-
-  /**
-   * Update a User, providing Id separately.
-   *
-   * @param userId The Id of the User being updated
-   * @param user The updated User information, missing id, firebaseId, and email
-   * @return The updated User object
-   */
-  public UserResponse updateResponse(ObjectId userId, User user) {
+    logger.info("update(userId={}, updatedUser={})", userId, updatedUser);
+    logger.info("userRepository.findById(userId={})", userId);
     User existingUser = userRepository.findById(userId)
-        .orElseThrow(() -> new NotFoundException(Map.of("userId", userId.toString())));
-    user.setId(userId);
-    user.setFirebaseId(existingUser.getFirebaseId());
-    user.setEmail(existingUser.getEmail());
-    validateUser(user);
-    return UserMapper.fromUser(userRepository.save(user));
+        .orElseThrow(() -> new NotFoundException("users", Map.of("userId", userId.toString())));
+    updatedUser.setId(userId);
+    updatedUser.setFirebaseId(existingUser.getFirebaseId());
+    updatedUser.setEmail(existingUser.getEmail());
+    validateUser(updatedUser);
+    logger.info("userRepository.save(updatedUser={})", updatedUser);
+    return userRepository.save(updatedUser);
   }
 
   /**
@@ -234,31 +197,23 @@ public class UserService {
    * @param updates The updates to be applied to the User
    * @return The updated User. Throws NFE otherwise.
    */
-  public User patch(ObjectId userId, JsonMergePatch updates) {
+  public User patch(ObjectId userId, Map<String, Object> updates) {
+    logger.info("patch(userId={}, updates={})", userId, updates);
+    logger.info("userRepository.findById(userId={})", userId);
     User user = userRepository.findById(userId)
-        .orElseThrow(() -> new NotFoundException(Map.of("userId", userId.toString())));
-    User updated = JsonMergePatchUtils.applyMergePatch(updates, user, User.class);
+        .orElseThrow(() -> new NotFoundException("users", Map.of("userId", userId.toString())));
+    User updated = PatchUtils.applyUserPatch(user, updates);
     validateUser(updated);
+    logger.info("userRepository.save(updated={})", updated);
     return userRepository.save(updated);
   }
 
-  /**
-   * Partially update a User and return the UserResponse DTO.
-   *
-   * @param userId The Id of the User to be updated
-   * @param updates The updates to be applied to the User
-   * @return The updated UserResponse. Throws NFE otherwise.
-   */
-  public UserResponse patchResponse(ObjectId userId, JsonMergePatch updates) {
-    return UserMapper.fromUser(patch(userId, updates));
-  }
-
-  private FeedItem toFeedItem(Object obj, User user) {
+  private FeedItem convertToFeedItem(Object obj, User user) {
     if (obj instanceof Achievement achievement) {
       return AchievementMapper.toAchievementFeedItem(achievement, user);
     } else if (obj instanceof Activity activity) {
       List<Skill> skills = skillRepository
-          .findByIdIn(activity.getSkillWeights().stream().map(sw -> sw.getSkillId()).toList());
+          .findByIdIn(activity.getSkillWeights().stream().map(SkillWeight::getSkillId).toList());
       return ActivityMapper.toActivityFeedItem(activity, skills, user);
     } else if (obj instanceof Tree tree) {
       return TreeMapper.toTreeFeedItem(tree, user);
@@ -275,13 +230,18 @@ public class UserService {
    * @param size The size of each page
    * @return The Paginated actions feed
    */
-  public Page<FeedItem> myActivityFeed(ObjectId userId, int page, int size) {
+  public Page<FeedItem> getUserActionsFeed(ObjectId userId, int page, int size) {
+    logger.info("getUserActivityFeed(userId={}, page={}, size={})", userId, page, size);
+    logger.info("userRepository.findById(userId={})", userId);
     User user = userRepository.findById(userId)
-        .orElseThrow(() -> new NotFoundException(Map.of("userId", userId.toString())));
+        .orElseThrow(() -> new NotFoundException("users", Map.of("userId", userId.toString())));
+    logger.info("achievementRepository.findByUserId(userId={})", userId);
+    logger.info("activityRepository.findByUserId(userId={})", userId);
+    logger.info("treeRepository.findByUserId(userId={})", userId);
     List<FeedItem> combined = Stream
         .of(achievementRepository.findByUserId(userId), activityRepository.findByUserId(userId),
             treeRepository.findByUserId(userId))
-        .flatMap(List::stream).map(obj -> toFeedItem(obj, user))
+        .flatMap(List::stream).map(obj -> convertToFeedItem(obj, user))
         .sorted(Comparator.comparing(FeedItem::getPostedAt).reversed()).toList();
     Pageable pageable = PageRequest.of(page, size);
     int start = (int) pageable.getOffset();
@@ -289,7 +249,28 @@ public class UserService {
     return new PageImpl<>(combined.subList(start, end), pageable, combined.size());
   }
 
+  /**
+   * Delete a User by their Id. Removes all related entities as well.
+   *
+   * @param userId The Id of the User to be deleted
+   */
+  @Transactional
   public void deleteById(ObjectId userId) {
+    logger.info("deleteById(userId={})", userId);
+    logger.info("activityRepository.deleteByUserId(userId={})", userId);
+    activityRepository.deleteByUserId(userId);
+    logger.info("friendshipRepository.deleteByRequesterIdOrAddresseeId(userId={}, userId={})",
+        userId, userId);
+    friendshipRepository.deleteByRequesterIdOrAddresseeId(userId, userId);
+    logger.info("skillRepository.deleteByUserId(userId={})", userId);
+    skillRepository.deleteByUserId(userId);
+    logger.info("achievementRepository.deleteByUserId(userId={})", userId);
+    achievementRepository.deleteByUserId(userId);
+    logger.info("orientationRepository.deleteByUserId(userId={})", userId);
+    orientationRepository.deleteByUserId(userId);
+    logger.info("treeRepository.deleteByUserId(userId={})", userId);
+    treeRepository.deleteByUserId(userId);
+    logger.info("userRepository.deleteById(userId={})", userId);
     userRepository.deleteById(userId);
   }
 }
