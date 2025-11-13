@@ -9,14 +9,13 @@ A full-stack **Spring Boot + React** application that gamifies skill development
 ## 📆 Project Status: “Final Backend Prototype”
 *Updated: 10/9/25*
 
-This repository represents the **final iteration of the Skill Tree backend**, capturing the complete architecture, endpoints, and data models that power the platform. It is **feature-complete** but **not yet fully tested or production-deployed**. The project serves as a strong foundation for user management, skill tracking, achievements, and activity logging through a RESTful **Spring Boot API** integrated with **MongoDB** and **Firebase Authentication**.
+This repository represents the **final iteration of the Skill Tree backend**, capturing the complete architecture, endpoints, and data models that power the platform. It is **feature-complete** but **not yet fully tested or production-deployed**, basic CRUD operations have been verified for all controllers. The project serves as a strong foundation for user management, skill tracking, achievements, and activity logging through a RESTful **Spring Boot API** integrated with **MongoDB** and **Firebase Authentication**.
 
 This is not the repository I use for devlopment.
 
 ---
 
 ## 🧭 Next Steps
-- 🧪 **Integration & Unit Testing** — expand test coverage for all controllers and services  
 - 🧩 **Frontend Integration** — refine the React client for smoother user experience and API consumption  
 - ✅ **E2E Testing** — implement end-to-end scripts to validate full-stack functionality  
 - 🌐 **Cloud Deployment** — deploy API and image storage on **AWS**, with authentication and hosting managed via **Firebase**  
